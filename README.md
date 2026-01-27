@@ -27,13 +27,13 @@ We have discovered that LLMs exhibit a fundamental structural fragility: **large
 
 ### Try Killing a Model Yourself
 
-[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/[USERNAME]/NeuroEntropy/blob/main/notebooks/Demo_1_Killing_Pythia.ipynb)
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ForestR/NeuroEntropy/blob/main/notebooks/Demo_1_Killing_Pythia.ipynb)
 
 Run our demo notebook to see how we can induce spectral collapse in Pythia-160M in just 5 minutes:
 
 ```bash
 # Clone the repository
-git clone https://github.com/[USERNAME]/NeuroEntropy.git
+git clone https://github.com/ForestR/NeuroEntropy.git
 cd NeuroEntropy
 
 # Install dependencies
@@ -99,7 +99,7 @@ Medium-scale verification of the scaling law hypothesis.
 
 ### Phase III: Large Models (🔍 Seeking Collaborators)
 
-**We need your help!** If you have access to larger models (70B+), please see our [Help Wanted issue](https://github.com/[USERNAME]/NeuroEntropy/issues/1) for verification experiments.
+**We need your help!** If you have access to larger models (70B+), please see our [Help Wanted issue](https://github.com/ForestR/NeuroEntropy/issues/1) for verification experiments.
 
 ---
 
@@ -152,7 +152,7 @@ If you use this work in your research, please cite:
   title={NeuroEntropy: The Thermodynamics of Intelligence Loss in LLMs},
   author={NeuroEntropy Research Team},
   year={2026},
-  url={https://github.com/[USERNAME]/NeuroEntropy},
+  url={https://github.com/ForestR/NeuroEntropy},
   license={Apache-2.0}
 }
 ```

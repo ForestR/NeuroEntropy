@@ -1,0 +1,20 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+  - given-names: "NeuroEntropy"
+    family-names: "Research Team"
+title: "NeuroEntropy: The Thermodynamics of Intelligence Loss in LLMs"
+version: 0.1.0
+date-released: 2026-01-27
+abstract: "A research laboratory for studying metabolic attacks on large language models. We prove mathematically and empirically that larger models are structurally more fragile to metabolic attacks that induce spectral collapse."
+keywords:
+  - "large language models"
+  - "adversarial attacks"
+  - "spectral collapse"
+  - "effective rank"
+  - "Hessian structure"
+  - "AI safety"
+  - "scaling laws"
+license: Apache-2.0
+repository-code: "https://github.com/ForestR/NeuroEntropy"
+url: "https://github.com/ForestR/NeuroEntropy"

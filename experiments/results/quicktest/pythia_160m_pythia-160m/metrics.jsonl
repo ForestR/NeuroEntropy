@@ -1,0 +1,24 @@
+{"step": 0, "timestamp": "2026-01-27T16:09:51.940096", "baseline_perplexity": 2539.743832226695, "baseline_effective_rank": 0.0, "baseline_spectral_gap": 0.0, "baseline_singular_values": []}
+{"step": 0, "timestamp": "2026-01-27T16:10:14.877987", "control_iteration": 0, "control_effective_rank": 2.6409826278686523, "control_loss": 21.171213150024414}
+{"step": 10, "timestamp": "2026-01-27T16:10:14.878496", "control_iteration": 10, "control_effective_rank": 2.7076075077056885, "control_loss": 23.908815383911133}
+{"step": 20, "timestamp": "2026-01-27T16:10:14.878798", "control_iteration": 20, "control_effective_rank": 3.0976576805114746, "control_loss": 24.18324851989746}
+{"step": 30, "timestamp": "2026-01-27T16:10:14.879085", "control_iteration": 30, "control_effective_rank": 2.56488037109375, "control_loss": 14.527522087097168}
+{"step": 40, "timestamp": "2026-01-27T16:10:14.879360", "control_iteration": 40, "control_effective_rank": 2.7208681106567383, "control_loss": 17.782052993774414}
+{"step": 50, "timestamp": "2026-01-27T16:10:14.879625", "control_iteration": 50, "control_effective_rank": 2.7400190830230713, "control_loss": 31.112207412719727}
+{"step": 60, "timestamp": "2026-01-27T16:10:14.879888", "control_iteration": 60, "control_effective_rank": 2.8812155723571777, "control_loss": 15.832911491394043}
+{"step": 70, "timestamp": "2026-01-27T16:10:14.880158", "control_iteration": 70, "control_effective_rank": 2.7414445877075195, "control_loss": 12.59701919555664}
+{"step": 80, "timestamp": "2026-01-27T16:10:14.880424", "control_iteration": 80, "control_effective_rank": 2.8758277893066406, "control_loss": 12.889850616455078}
+{"step": 90, "timestamp": "2026-01-27T16:10:14.880687", "control_iteration": 90, "control_effective_rank": 2.886892318725586, "control_loss": 18.644594192504883}
+{"step": 0, "timestamp": "2026-01-27T16:11:55.069181", "treatment_iteration": 0, "treatment_effective_rank": 0.0, "treatment_rank_reduction": 0.0}
+{"step": 10, "timestamp": "2026-01-27T16:11:55.069353", "treatment_iteration": 10, "treatment_effective_rank": 0.0, "treatment_rank_reduction": 0.0}
+{"step": 20, "timestamp": "2026-01-27T16:11:55.069423", "treatment_iteration": 20, "treatment_effective_rank": 0.0, "treatment_rank_reduction": 0.0}
+{"step": 30, "timestamp": "2026-01-27T16:11:55.069479", "treatment_iteration": 30, "treatment_effective_rank": 0.0, "treatment_rank_reduction": 0.0}
+{"step": 40, "timestamp": "2026-01-27T16:11:55.069531", "treatment_iteration": 40, "treatment_effective_rank": 0.0, "treatment_rank_reduction": 0.0}
+{"step": 50, "timestamp": "2026-01-27T16:11:55.069583", "treatment_iteration": 50, "treatment_effective_rank": 0.0, "treatment_rank_reduction": 0.0}
+{"step": 60, "timestamp": "2026-01-27T16:11:55.069634", "treatment_iteration": 60, "treatment_effective_rank": 0.0, "treatment_rank_reduction": 0.0}
+{"step": 70, "timestamp": "2026-01-27T16:11:55.069685", "treatment_iteration": 70, "treatment_effective_rank": 0.0, "treatment_rank_reduction": 0.0}
+{"step": 80, "timestamp": "2026-01-27T16:11:55.069735", "treatment_iteration": 80, "treatment_effective_rank": 0.0, "treatment_rank_reduction": 0.0}
+{"step": 90, "timestamp": "2026-01-27T16:11:55.069786", "treatment_iteration": 90, "treatment_effective_rank": 0.0, "treatment_rank_reduction": 0.0}
+{"step": 99, "timestamp": "2026-01-27T16:11:55.069836", "treatment_iteration": 99, "treatment_effective_rank": 0.0, "treatment_rank_reduction": 0.0}
+{"step": 100, "timestamp": "2026-01-27T16:11:55.069888", "final_initial_rank": 0.0, "final_final_rank": 0.0, "final_rank_reduction": 0.0, "final_iterations": 11, "final_catalyst_tokens": [[467, 17677, 576, 17677, 648, 1638, 467, 17030, 467, 3059, 32776, 35083, 13696, 14018, 22801, 30354, 24252, 542, 20188, 14464, 4945, 2763, 32776, 49213, 1636, 13428, 18439, 27792, 20010, 140, 14672, 33448, 33129, 31390, 35696, 36462, 7223, 349, 15246, 3203, 33331, 35229, 28658, 8660, 24450, 18306, 32169, 8928, 26016, 50016, 2584, 32877, 5901, 7018, 11760, 24552, 17041, 39236, 16489, 19176, 31767, 34389, 12552, 13730, 4575, 12703, 32776, 14451, 8596, 27159, 13598, 8777, 32776, 3203, 1085, 3203, 48817, 2286, 14600, 16990, 10025, 10873, 33588, 27521, 45748, 31996, 10750, 25818, 29529, 21212, 11589, 26406, 39777, 37538, 5320, 8499, 16476, 49991, 11243, 46317, 34016, 47175, 24317, 363, 26676, 47962, 25950, 4330, 2036, 37056, 32426, 14678, 4683, 47375, 32513, 11667, 27644, 41252, 2580, 11224, 32776, 8824, 28363, 173, 22292, 14430, 41380, 7066]]}
+{"step": 101, "timestamp": "2026-01-27T16:11:56.887024", "post_attack_perplexity": 209835569.6638497, "post_attack_effective_rank": 0.0, "post_attack_spectral_gap": 0.0, "post_attack_singular_values": []}

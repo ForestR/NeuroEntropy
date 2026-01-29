@@ -127,6 +127,17 @@ class ExperimentLogger:
         latest_path = self.checkpoint_dir / "checkpoint_latest.pt"
         torch.save(checkpoint, latest_path)
     
+    def _is_8bit_quantized(self, model: torch.nn.Module) -> bool:
+        """Check if model uses 8-bit quantization (Linear8bitLt)."""
+        try:
+            from bitsandbytes.nn import Linear8bitLt
+            for module in model.modules():
+                if isinstance(module, Linear8bitLt):
+                    return True
+        except ImportError:
+            pass
+        return False
+    
     def load_checkpoint(
         self,
         checkpoint_path: Optional[str] = None,
@@ -152,6 +163,30 @@ class ExperimentLogger:
         checkpoint = torch.load(checkpoint_path, map_location='cpu')
         
         if model is not None:
+            # Check if model is 8-bit quantized
+            is_8bit = self._is_8bit_quantized(model)
+            
+            # For 8-bit quantized models, checkpoint loading is not supported by bitsandbytes
+            # The checkpoint contains quantized weights, but Linear8bitLt expects to quantize
+            # FP16 weights itself. Loading quantized checkpoints into already-quantized models fails.
+            if is_8bit:
+                import warnings
+                warnings.warn(
+                    "Checkpoint loading is not supported for 8-bit quantized models. "
+                    "bitsandbytes Linear8bitLt modules cannot load quantized checkpoints. "
+                    "To reset to baseline, reload the model from the original HuggingFace checkpoint.",
+                    UserWarning
+                )
+                # Return checkpoint dict without loading into model
+                return checkpoint
+            
+            # Check model device placement
+            model_device = None
+            if hasattr(model, 'parameters'):
+                sample_params = list(model.parameters())
+                if sample_params:
+                    model_device = str(sample_params[0].device)
+            
             state_dict = checkpoint['model_state_dict']
             
             # Filter out quantization-related keys (bitsandbytes metadata)
@@ -160,6 +195,13 @@ class ExperimentLogger:
                 k: v for k, v in state_dict.items()
                 if not any(quant_key in k for quant_key in ['.absmax', '.quant_map', '.quant_state'])
             }
+            
+            # Move state dict tensors to model device if needed
+            if model_device and 'cuda' in model_device and torch.cuda.is_available():
+                filtered_state_dict = {
+                    k: v.to(model_device) if isinstance(v, torch.Tensor) else v
+                    for k, v in filtered_state_dict.items()
+                }
             
             # Load with strict=False to handle any remaining mismatches gracefully
             missing_keys, unexpected_keys = model.load_state_dict(filtered_state_dict, strict=False)

@@ -56,6 +56,9 @@ models/
 *.bin
 *.safetensors
 
+# Checkpoints
+*.pt
+
 # Logs
 *.log
 logs/

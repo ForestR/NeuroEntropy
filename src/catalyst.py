@@ -49,6 +49,39 @@ class HessianAwareCatalyst:
         self.noise_amp = noise_amplification_factor
         self.seed = seed
         self.model.eval()  # Set to eval mode for HVP computation
+    
+    def _is_quantized_model(self) -> bool:
+        """Check if model uses bitsandbytes quantization."""
+        try:
+            from bitsandbytes.nn import Linear4bit, Linear8bitLt
+            for module in self.model.modules():
+                if isinstance(module, (Linear4bit, Linear8bitLt)):
+                    return True
+        except ImportError:
+            pass
+        return False
+    
+    def _get_trainable_params(self) -> List[torch.nn.Parameter]:
+        """
+        Get list of trainable parameters (those that require grad).
+        
+        Returns:
+            List of parameters that require gradients
+        """
+        params = [p for p in self.model.parameters() if p.requires_grad]
+        if not params:
+            # Fallback: get all parameters if none require grad (shouldn't happen normally)
+            params = list(self.model.parameters())
+        return params
+    
+    def _get_num_trainable_params(self) -> int:
+        """
+        Get count of trainable parameters (those that require grad).
+        
+        Returns:
+            Total number of elements in trainable parameters
+        """
+        return sum(p.numel() for p in self._get_trainable_params())
         
     def _compute_loss(
         self,
@@ -93,15 +126,19 @@ class HessianAwareCatalyst:
         Returns:
             hvp: Hessian-vector product (flattened)
         """
-        # Get model parameters
-        params = list(self.model.parameters())
+        # Get model parameters - filter to only include those that require grad
+        params = self._get_trainable_params()
         
         # Get model dtype for consistency
         model_dtype = next(self.model.parameters()).dtype
         
+        # Check if model is quantized (bitsandbytes)
+        is_quantized = self._is_quantized_model()
+        
         # PyTorch autograd has issues with float16 for second-order gradients
         # Workaround: recompute gradients in float32 if model is float16
-        use_fp32_for_hvp = (model_dtype == torch.float16)
+        # Skip this workaround for quantized models as they handle precision internally
+        use_fp32_for_hvp = (model_dtype == torch.float16) and not is_quantized
         
         if use_fp32_for_hvp:
             # Save original parameter and buffer data, then convert entire model to float32
@@ -140,19 +177,50 @@ class HessianAwareCatalyst:
         try:
             with sdp_ctx:
                 loss = self._compute_loss(input_ids_fp32, labels_fp32)
-                grad = torch.autograd.grad(
-                    loss,
-                    params,
-                    create_graph=True,
-                    retain_graph=True
-                )
+                try:
+                    grad = torch.autograd.grad(
+                        loss,
+                        params,
+                        create_graph=True,
+                        retain_graph=True
+                    )
+                except RuntimeError as e:
+                    # Handle gradient computation failures, especially for quantized models
+                    if is_quantized and "does not require grad" in str(e):
+                        # For quantized models, filter params more strictly
+                        params = [p for p in params if p.requires_grad and p.grad_fn is None]
+                        if not params:
+                            raise RuntimeError(
+                                "No parameters with gradients found. Quantized models may have "
+                                "limited gradient support. Consider using a non-quantized model."
+                            ) from e
+                        # Retry with filtered parameters
+                        grad = torch.autograd.grad(
+                            loss,
+                            params,
+                            create_graph=True,
+                            retain_graph=True
+                        )
+                    else:
+                        raise
             
             # Flatten gradients
             grad_flat_parts = []
             for g in grad:
                 if g is not None:
                     grad_flat_parts.append(g.view(-1))
+            if not grad_flat_parts:
+                raise RuntimeError("No gradients computed. All gradients are None.")
             grad_flat = torch.cat(grad_flat_parts)
+            
+            # Validate vector size matches gradient size
+            expected_size = sum(p.numel() for p in params)
+            if vector.numel() != expected_size:
+                raise ValueError(
+                    f"Vector size mismatch: vector has {vector.numel()} elements, "
+                    f"but gradients have {expected_size} elements. "
+                    f"This may occur if parameters were filtered inconsistently."
+                )
             
             # Ensure vector matches grad_flat dtype
             if use_fp32_for_hvp:
@@ -247,8 +315,9 @@ class HessianAwareCatalyst:
                 if original_buffer_data is not None:
                     for name, orig_data in original_buffer_data.items():
                         self.model.get_buffer(name).data = orig_data
-                # Restore model to original dtype
-                self.model = self.model.to(dtype=model_dtype)
+                # Restore model to original dtype (skip for quantized models)
+                if not is_quantized:
+                    self.model = self.model.to(dtype=model_dtype)
         
         return hvp_flat
     
@@ -280,7 +349,7 @@ class HessianAwareCatalyst:
             null_directions: List of null space direction vectors
         """
         null_directions = []
-        num_params = sum(p.numel() for p in self.model.parameters())
+        num_params = self._get_num_trainable_params()
         
         # Get dtype from model parameters
         model_dtype = next(self.model.parameters()).dtype
@@ -490,7 +559,7 @@ class HessianAwareCatalyst:
             eigenvectors: Corresponding eigenvectors
         """
         # Use Power Iteration to estimate top eigenvalues
-        num_params = sum(p.numel() for p in self.model.parameters())
+        num_params = self._get_num_trainable_params()
         eigenvalues = []
         eigenvectors = []
         

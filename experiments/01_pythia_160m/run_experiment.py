@@ -257,9 +257,10 @@ def main():
         help='Skip control group experiment'
     )
     parser.add_argument(
-        '--reset-between-runs',
-        action='store_true',
-        help='Reset model state before treatment group (ensures clean state)'
+        '--resume-from-checkpoint',
+        type=str,
+        default=None,
+        help='Path to checkpoint file to resume from (optional)'
     )
     
     args = parser.parse_args()
@@ -296,11 +297,32 @@ def main():
     # Load model
     model, tokenizer = load_model(config, args.device)
     
-    # Save initial model state for reset capability
-    if args.reset_between_runs:
-        import copy
-        initial_model_state = copy.deepcopy(model.state_dict())
-        print("Initial model state saved for reset capability")
+    # Resume from checkpoint if specified, otherwise save baseline checkpoint
+    if args.resume_from_checkpoint:
+        logger.load_checkpoint(
+            checkpoint_path=args.resume_from_checkpoint,
+            model=model
+        )
+        print(f"Resumed from checkpoint: {args.resume_from_checkpoint}")
+    else:
+        # Always save initial model state (baseline checkpoint)
+        baseline_checkpoint_path = logger.checkpoint_dir / "checkpoint_baseline.pt"
+        torch.save({
+            'step': 0,
+            'model_state_dict': model.state_dict(),
+            'checkpoint_type': 'baseline',
+            'description': 'Initial model state before any modifications'
+        }, baseline_checkpoint_path)
+        # Also save using logger for consistency
+        logger.save_checkpoint(
+            step=0,
+            model=model,
+            additional_state={
+                'checkpoint_type': 'baseline',
+                'description': 'Initial model state before any modifications'
+            }
+        )
+        print("Baseline model checkpoint saved to disk")
     
     # 1. Baseline measurement
     print("\n" + "="*50)
@@ -313,6 +335,15 @@ def main():
     
     # 2. Control group (optional)
     if not args.skip_control:
+        # Reset to baseline before control group
+        baseline_checkpoint_path = logger.checkpoint_dir / "checkpoint_baseline.pt"
+        if baseline_checkpoint_path.exists():
+            logger.load_checkpoint(
+                checkpoint_path=str(baseline_checkpoint_path),
+                model=model
+            )
+            print("Model reset to baseline state before control group")
+        
         print("\n" + "="*50)
         print("PHASE 2: Control Group (Random Noise)")
         print("="*50)
@@ -332,16 +363,38 @@ def main():
             control_history,
             save_path=str(logger.get_log_path() / "control_rank_collapse.png")
         )
+        
+        # Save checkpoint after control group
+        post_control_checkpoint_path = logger.checkpoint_dir / "checkpoint_post_control.pt"
+        torch.save({
+            'step': config.attack.num_steps,
+            'model_state_dict': model.state_dict(),
+            'checkpoint_type': 'post_control',
+            'description': 'Model state after control group (random noise)'
+        }, post_control_checkpoint_path)
+        logger.save_checkpoint(
+            step=config.attack.num_steps,
+            model=model,
+            additional_state={
+                'checkpoint_type': 'post_control',
+                'description': 'Model state after control group (random noise)'
+            }
+        )
+        print("Post-control checkpoint saved")
     
     # 3. Treatment group
     print("\n" + "="*50)
     print("PHASE 3: Treatment Group (Eigen-Prion)")
     print("="*50)
     
-    # Reset model state before treatment group if requested
-    if args.reset_between_runs:
-        model.load_state_dict(initial_model_state)
-        print("Model state reset to initial state before treatment group")
+    # Always reset to baseline before treatment group
+    baseline_checkpoint_path = logger.checkpoint_dir / "checkpoint_baseline.pt"
+    if baseline_checkpoint_path.exists():
+        logger.load_checkpoint(
+            checkpoint_path=str(baseline_checkpoint_path),
+            model=model
+        )
+        print("Model reset to baseline state before treatment group")
     
     treatment = run_treatment_group(model, tokenizer, args.device, config)
     
@@ -364,6 +417,24 @@ def main():
         treatment['history'],
         save_path=str(logger.get_log_path() / "treatment_rank_reduction.png")
     )
+    
+    # Save checkpoint after treatment group
+    post_treatment_checkpoint_path = logger.checkpoint_dir / "checkpoint_post_treatment.pt"
+    torch.save({
+        'step': config.attack.num_steps,
+        'model_state_dict': model.state_dict(),
+        'checkpoint_type': 'post_treatment',
+        'description': 'Model state after treatment group (Eigen-Prion attack)'
+    }, post_treatment_checkpoint_path)
+    logger.save_checkpoint(
+        step=config.attack.num_steps,
+        model=model,
+        additional_state={
+            'checkpoint_type': 'post_treatment',
+            'description': 'Model state after treatment group (Eigen-Prion attack)'
+        }
+    )
+    print("Post-treatment checkpoint saved")
     
     # 4. Post-attack measurement
     print("\n" + "="*50)

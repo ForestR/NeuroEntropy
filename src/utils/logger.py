@@ -152,7 +152,27 @@ class ExperimentLogger:
         checkpoint = torch.load(checkpoint_path, map_location='cpu')
         
         if model is not None:
-            model.load_state_dict(checkpoint['model_state_dict'])
+            state_dict = checkpoint['model_state_dict']
+            
+            # Filter out quantization-related keys (bitsandbytes metadata)
+            # These keys are not part of the standard PyTorch model structure
+            filtered_state_dict = {
+                k: v for k, v in state_dict.items()
+                if not any(quant_key in k for quant_key in ['.absmax', '.quant_map', '.quant_state'])
+            }
+            
+            # Load with strict=False to handle any remaining mismatches gracefully
+            missing_keys, unexpected_keys = model.load_state_dict(filtered_state_dict, strict=False)
+            
+            # Log warnings if there are missing or unexpected keys (but quantization keys are expected)
+            if missing_keys:
+                # Filter out quantization-related missing keys from warnings
+                non_quant_missing = [
+                    k for k in missing_keys 
+                    if not any(quant_key in k for quant_key in ['.absmax', '.quant_map', '.quant_state'])
+                ]
+                if non_quant_missing:
+                    print(f"Warning: Some model parameters were not found in checkpoint: {non_quant_missing[:5]}{'...' if len(non_quant_missing) > 5 else ''}")
         
         if optimizer is not None and 'optimizer_state_dict' in checkpoint:
             optimizer.load_state_dict(checkpoint['optimizer_state_dict'])

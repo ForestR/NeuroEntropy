@@ -29,7 +29,11 @@ def compute_effective_rank(
         effective_rank: Scalar effective rank value
     """
     # Reshape to (batch * seq_len, hidden_dim)
-    A = activations.view(-1, activations.size(-1)).detach().cpu().numpy()
+    # Convert to float32 if needed (numpy linalg doesn't support float16)
+    A = activations.view(-1, activations.size(-1)).detach().cpu()
+    if A.dtype == torch.float16:
+        A = A.float()
+    A = A.numpy()
     
     # Compute SVD
     U, s, Vt = svd(A, full_matrices=False)
@@ -69,7 +73,11 @@ def extract_singular_values(
         singular_values: Array of singular values (descending order)
     """
     # Reshape to (batch * seq_len, hidden_dim)
-    A = activations.view(-1, activations.size(-1)).detach().cpu().numpy()
+    # Convert to float32 if needed (numpy linalg doesn't support float16)
+    A = activations.view(-1, activations.size(-1)).detach().cpu()
+    if A.dtype == torch.float16:
+        A = A.float()
+    A = A.numpy()
     
     # Compute SVD
     U, s, Vt = svd(A, full_matrices=False)
@@ -101,7 +109,11 @@ def compute_spectral_gap(
         spectral_gap: Ratio lambda_1 / lambda_2
     """
     # Reshape to (batch * seq_len, hidden_dim)
-    A = activations.view(-1, activations.size(-1)).detach().cpu().numpy()
+    # Convert to float32 if needed (numpy linalg doesn't support float16)
+    A = activations.view(-1, activations.size(-1)).detach().cpu()
+    if A.dtype == torch.float16:
+        A = A.float()
+    A = A.numpy()
     
     # Compute covariance matrix
     A_centered = A - A.mean(axis=0, keepdims=True)

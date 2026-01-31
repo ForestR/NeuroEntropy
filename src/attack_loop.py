@@ -9,6 +9,18 @@ import torch
 from typing import Dict, List, Optional, Union
 from tqdm import tqdm
 
+try:
+    import bitsandbytes as bnb
+    BITSANDBYTES_AVAILABLE = True
+except ImportError:
+    BITSANDBYTES_AVAILABLE = False
+
+try:
+    from transformers.optimization import Adafactor
+    ADAFACTOR_AVAILABLE = True
+except ImportError:
+    ADAFACTOR_AVAILABLE = False
+
 from .catalyst import HessianAwareCatalyst
 from .diagnosis import compute_effective_rank, compute_spectral_gap, ActivationHook
 
@@ -62,7 +74,8 @@ class MetabolicAttackLoop:
         num_iterations: int = 100,
         catalyst_tokens: Optional[torch.Tensor] = None,
         target_rank_reduction: float = 0.5,
-        learning_rate: float = 1e-4
+        learning_rate: float = 1e-4,
+        catalyst_length: int = 64
     ) -> Dict:
         """
         Run a single attack cycle.
@@ -72,17 +85,62 @@ class MetabolicAttackLoop:
             catalyst_tokens: Pre-generated catalyst tokens (if None, generate new)
             target_rank_reduction: Target reduction in effective rank
             learning_rate: Learning rate for parameter updates
+            catalyst_length: Length of catalyst sequence in tokens
             
         Returns:
             attack_results: Dictionary with attack metrics
         """
         # Generate catalyst if not provided
         if catalyst_tokens is None:
+            # Clear memory before catalyst generation
+            if self.device == "cuda" and torch.cuda.is_available():
+                torch.cuda.empty_cache()
             catalyst_tokens = self.catalyst_generator.generate_catalyst(
                 num_steps=50,
                 learning_rate=1e-2,
-                catalyst_length=128
+                catalyst_length=catalyst_length
             )
+            # Clear memory after catalyst generation
+            if self.device == "cuda" and torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        
+        # Initialize optimizer for memory efficiency
+        # Option 2 (PI directive): Use Adafactor for zero optimizer state memory overhead
+        # This eliminates the ~2.8 GB optimizer state memory for 1.4B models
+        trainable_params = [p for p in self.model.parameters() if p.requires_grad]
+        if trainable_params:
+            if ADAFACTOR_AVAILABLE:
+                # Adafactor: Zero optimizer state overhead (stores row/column sums instead of full states)
+                # Trade-off: Slightly slower convergence, but acceptable for 100-step attack
+                optimizer = Adafactor(
+                    trainable_params,
+                    lr=learning_rate,
+                    relative_step=False,  # Use fixed learning rate
+                    scale_parameter=False,  # Disable parameter scaling
+                    warmup_init=False
+                )
+                print(f"Using Adafactor optimizer (zero optimizer state overhead) for {len(trainable_params)} trainable parameters")
+            elif BITSANDBYTES_AVAILABLE:
+                # Fallback: 8-bit AdamW optimizer (saves ~8.4 GB VRAM vs FP32 Adam)
+                optimizer = bnb.optim.AdamW8bit(
+                    trainable_params,
+                    lr=learning_rate,
+                    betas=(0.9, 0.999),
+                    eps=1e-8
+                )
+                print(f"Using AdamW8bit optimizer (8-bit optimizer states) for {len(trainable_params)} trainable parameters")
+            else:
+                # Final fallback: Standard AdamW if neither Adafactor nor bitsandbytes available
+                optimizer = torch.optim.AdamW(
+                    trainable_params,
+                    lr=learning_rate,
+                    betas=(0.9, 0.999),
+                    eps=1e-8
+                )
+                print(f"Using standard AdamW optimizer (FP32 optimizer states) for {len(trainable_params)} trainable parameters")
+        else:
+            optimizer = None
+            print("Warning: No trainable parameters found, optimizer not initialized")
         
         # Measure initial rank
         initial_rank = self._measure_current_rank(catalyst_tokens)
@@ -90,7 +148,7 @@ class MetabolicAttackLoop:
         # Simulate repeated exposure
         for iteration in tqdm(range(num_iterations), desc="Attack cycle"):
             # Expose model to catalyst
-            self._expose_to_catalyst(catalyst_tokens, learning_rate)
+            self._expose_to_catalyst(catalyst_tokens, optimizer)
             
             # Periodic diagnosis
             if iteration % 10 == 0 or iteration == num_iterations - 1:
@@ -108,6 +166,12 @@ class MetabolicAttackLoop:
         
         final_rank = self._measure_current_rank(catalyst_tokens)
         
+        # Clean up optimizer
+        if optimizer is not None:
+            del optimizer
+            if self.device == "cuda" and torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        
         return {
             'initial_rank': initial_rank,
             'final_rank': final_rank,
@@ -119,17 +183,17 @@ class MetabolicAttackLoop:
     def _expose_to_catalyst(
         self,
         catalyst_tokens: torch.Tensor,
-        learning_rate: float = 1e-4
+        optimizer: Optional[torch.optim.Optimizer] = None
     ):
         """
         Expose model to catalyst tokens.
         
         This performs a forward and backward pass, updating model parameters
-        (or LoRA parameters if use_lora=True).
+        using the provided optimizer (AdamW8bit for memory efficiency).
         
         Args:
             catalyst_tokens: Token IDs for catalyst
-            learning_rate: Learning rate for parameter updates
+            optimizer: Optimizer instance (AdamW8bit or AdamW). If None, falls back to manual SGD.
         """
         self.model.train()
         
@@ -148,12 +212,24 @@ class MetabolicAttackLoop:
         # Backward pass
         loss.backward()
         
-        # Update parameters
-        with torch.no_grad():
-            for param in self.model.parameters():
-                if param.requires_grad and param.grad is not None:
-                    param.data -= learning_rate * param.grad
-                    param.grad.zero_()
+        # Update parameters using optimizer (memory-efficient 8-bit AdamW)
+        if optimizer is not None:
+            optimizer.step()
+            optimizer.zero_grad()
+        else:
+            # Fallback to manual SGD if optimizer not provided (for backward compatibility)
+            # This should not happen in normal operation after refactoring
+            learning_rate = 1e-4  # Default fallback LR
+            with torch.no_grad():
+                for param in self.model.parameters():
+                    if param.requires_grad and param.grad is not None:
+                        param.data -= learning_rate * param.grad
+                        param.grad.zero_()
+        
+        # Clear output tensors and free memory
+        del outputs, loss
+        if self.device == "cuda" and torch.cuda.is_available():
+            torch.cuda.empty_cache()
         
         self.model.eval()
     

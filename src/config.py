@@ -18,6 +18,8 @@ class ModelConfig:
     max_seq_length: int = 512
     use_quantization: bool = False
     quantization_bits: int = 4  # 4-bit or 8-bit
+    use_gradient_checkpointing: bool = False
+    use_fft: bool = False  # Full Fine-Tuning mode (no LoRA)
 
 
 @dataclass
@@ -37,7 +39,7 @@ class AttackConfig:
     learning_rate: float = 1e-4
     batch_size: int = 1
     target_rank_reduction: float = 0.5  # Target reduction in effective rank
-    catalyst_length: int = 128  # Length of catalyst prompt in tokens
+    catalyst_length: int = 64  # Length of catalyst prompt in tokens (reduced from 128 for memory efficiency)
 
 
 @dataclass
@@ -68,8 +70,11 @@ class ExperimentConfig:
         with open(yaml_path, 'r') as f:
             config_dict = yaml.safe_load(f)
         
+        model_dict = config_dict['model']
+        model_dict.setdefault('use_gradient_checkpointing', False)
+        model_dict.setdefault('use_fft', False)
         return cls(
-            model=ModelConfig(**config_dict['model']),
+            model=ModelConfig(**model_dict),
             lora=LoRAConfig(**config_dict.get('lora', {})),
             attack=AttackConfig(**config_dict.get('attack', {})),
             hvp=HVPConfig(**config_dict.get('hvp', {})),
@@ -89,6 +94,8 @@ class ExperimentConfig:
                 'max_seq_length': self.model.max_seq_length,
                 'use_quantization': self.model.use_quantization,
                 'quantization_bits': self.model.quantization_bits,
+                'use_gradient_checkpointing': self.model.use_gradient_checkpointing,
+                'use_fft': self.model.use_fft,
             },
             'lora': {
                 'rank': self.lora.rank,
@@ -162,6 +169,63 @@ def get_pythia_410m_config() -> ExperimentConfig:
             max_seq_length=512,
             use_quantization=True,  # Use quantization for larger model
             quantization_bits=4,
+        ),
+        lora=LoRAConfig(rank=16, alpha=32),
+        attack=AttackConfig(num_steps=100, learning_rate=1e-4),
+        hvp=HVPConfig(num_power_iterations=50, null_space_threshold=1e-6),
+    )
+
+
+def get_pythia_1b_config() -> ExperimentConfig:
+    """Get default config for Pythia-1B (FFT mode per PI directive)."""
+    return ExperimentConfig(
+        model=ModelConfig(
+            name="pythia-1b",
+            hf_model_id="EleutherAI/pythia-1b",
+            max_seq_length=512,
+            use_quantization=False,  # FP16 per Priority 1
+            use_gradient_checkpointing=True,
+            use_fft=True,
+        ),
+        lora=LoRAConfig(rank=16, alpha=32),
+        attack=AttackConfig(
+            num_steps=100,
+            learning_rate=2e-4,  # Increased from 1e-4 for larger models (compensate for relative perturbation decrease)
+            catalyst_length=64  # Reduced from 128 for memory efficiency
+        ),
+        hvp=HVPConfig(num_power_iterations=50, null_space_threshold=1e-6),
+    )
+
+
+def get_pythia_1_4b_config() -> ExperimentConfig:
+    """Get default config for Pythia-1.4B (FFT mode per PI directive)."""
+    return ExperimentConfig(
+        model=ModelConfig(
+            name="pythia-1.4b",
+            hf_model_id="EleutherAI/pythia-1.4b",
+            max_seq_length=512,
+            use_quantization=False,  # FP16 per Priority 1
+            use_gradient_checkpointing=True,
+            use_fft=True,
+        ),
+        lora=LoRAConfig(rank=16, alpha=32),
+        attack=AttackConfig(
+            num_steps=100,
+            learning_rate=2e-4,  # Increased from 1e-4 for larger models (compensate for relative perturbation decrease)
+            catalyst_length=32  # Aggressive reduction for 1.4B memory constraints (PI directive: Option 1)
+        ),
+        hvp=HVPConfig(num_power_iterations=50, null_space_threshold=1e-6),
+    )
+
+
+def get_pythia_2_8b_config() -> ExperimentConfig:
+    """Get default config for Pythia-2.8B."""
+    return ExperimentConfig(
+        model=ModelConfig(
+            name="pythia-2.8b",
+            hf_model_id="EleutherAI/pythia-2.8b",
+            max_seq_length=512,
+            use_quantization=False,  # FP16 per Priority 1
         ),
         lora=LoRAConfig(rank=16, alpha=32),
         attack=AttackConfig(num_steps=100, learning_rate=1e-4),

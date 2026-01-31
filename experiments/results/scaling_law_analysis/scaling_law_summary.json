@@ -1,0 +1,50 @@
+[
+  {
+    "model_name": "70m",
+    "model_size": 70000000.0,
+    "model_size_millions": 70.0,
+    "num_runs": 10,
+    "mean_rank_reduction_pct": 2.975,
+    "std_dev_rank_reduction_pct": 3.039865676857011,
+    "min_rank_reduction_pct": 0.03,
+    "max_rank_reduction_pct": 9.72,
+    "mean_baseline_rank": 3.3187,
+    "mean_post_attack_rank": 3.4173
+  },
+  {
+    "model_name": "160m",
+    "model_size": 160000000.0,
+    "model_size_millions": 160.0,
+    "num_runs": 10,
+    "mean_rank_reduction_pct": 4.0680000000000005,
+    "std_dev_rank_reduction_pct": 6.64702907738153,
+    "min_rank_reduction_pct": 0.11,
+    "max_rank_reduction_pct": 22.16,
+    "mean_baseline_rank": 2.8591,
+    "mean_post_attack_rank": 2.9306900000000002
+  },
+  {
+    "model_name": "410m",
+    "model_size": 410000000.0,
+    "model_size_millions": 410.0,
+    "num_runs": 10,
+    "mean_rank_reduction_pct": 5.816,
+    "std_dev_rank_reduction_pct": 3.9580416032848027,
+    "min_rank_reduction_pct": 2.37,
+    "max_rank_reduction_pct": 13.02,
+    "mean_baseline_rank": 2.3953,
+    "mean_post_attack_rank": 2.44208
+  },
+  {
+    "model_name": "1b",
+    "model_size": 1000000000.0,
+    "model_size_millions": 1000.0,
+    "num_runs": 10,
+    "mean_rank_reduction_pct": 26.446,
+    "std_dev_rank_reduction_pct": 13.266398824766945,
+    "min_rank_reduction_pct": 4.16,
+    "max_rank_reduction_pct": 46.07,
+    "mean_baseline_rank": 2.5515,
+    "mean_post_attack_rank": 2.77732
+  }
+]

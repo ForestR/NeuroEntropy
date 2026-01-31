@@ -135,10 +135,9 @@ class HessianAwareCatalyst:
         # Check if model is quantized (bitsandbytes)
         is_quantized = self._is_quantized_model()
         
-        # PyTorch autograd has issues with float16 for second-order gradients
-        # Workaround: recompute gradients in float32 if model is float16
-        # Skip this workaround for quantized models as they handle precision internally
-        use_fp32_for_hvp = (model_dtype == torch.float16) and not is_quantized
+        # Force FP16 for HVP computation per PI directive: "precision is less important than existence"
+        # This avoids doubling memory usage from FP32 conversion and is sufficient for finding approximate null directions
+        use_fp32_for_hvp = False
         
         if use_fp32_for_hvp:
             # Save original parameter and buffer data, then convert entire model to float32
@@ -318,6 +317,18 @@ class HessianAwareCatalyst:
                 # Restore model to original dtype (skip for quantized models)
                 if not is_quantized:
                     self.model = self.model.to(dtype=model_dtype)
+            
+            # Clear gradients and free memory after HVP computation
+            if hasattr(self.model, 'zero_grad'):
+                self.model.zero_grad()
+            else:
+                for p in self.model.parameters():
+                    if p.grad is not None:
+                        p.grad = None
+            
+            # Clear CUDA cache to free fragmented memory
+            if self.device == "cuda" and torch.cuda.is_available():
+                torch.cuda.empty_cache()
         
         return hvp_flat
     
@@ -351,6 +362,13 @@ class HessianAwareCatalyst:
         null_directions = []
         num_params = self._get_num_trainable_params()
         
+        # Reduce directions for large models (>1B params) to save memory
+        if num_params > 1e9 and num_directions > 3:
+            original_num_directions = num_directions
+            num_directions = min(3, num_directions)
+            print(f"Large model detected ({num_params/1e9:.1f}B params). "
+                  f"Reducing num_null_directions from {original_num_directions} to {num_directions}")
+        
         # Get dtype from model parameters
         model_dtype = next(self.model.parameters()).dtype
         
@@ -376,7 +394,8 @@ class HessianAwareCatalyst:
                 # Ensure threshold is same dtype as hvp_norm
                 threshold_tensor = torch.tensor(threshold, dtype=hvp_norm.dtype, device=hvp_norm.device)
                 if hvp_norm < threshold_tensor:
-                    null_directions.append(v.clone())
+                    # Offload to CPU immediately to save GPU memory
+                    null_directions.append(v.cpu().clone())
                     break
                 
                 # Power iteration: v = Hv / ||Hv||
@@ -389,20 +408,26 @@ class HessianAwareCatalyst:
                 
                 # Orthogonalize against previously found directions
                 for prev_dir in null_directions:
-                    # Ensure prev_dir matches v dtype
-                    prev_dir_converted = prev_dir.to(dtype=v.dtype)
-                    v = v - (v @ prev_dir_converted) * prev_dir_converted
+                    # Temporarily move prev_dir to GPU for computation, then it stays on CPU
+                    prev_dir_gpu = prev_dir.to(device=self.device, dtype=v.dtype)
+                    v = v - (v @ prev_dir_gpu) * prev_dir_gpu
                 
                 v_norm = torch.norm(v)
                 epsilon_norm = torch.tensor(1e-10, dtype=v_norm.dtype, device=v_norm.device)
                 v = v / (v_norm + epsilon_norm)
                 v = v.to(dtype=model_dtype)  # Ensure dtype consistency after normalization
             
+            # Clear intermediate tensors periodically
+            del hvp
+            if direction_idx % 2 == 0 and self.device == "cuda" and torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            
             if len(null_directions) == direction_idx + 1:
                 continue  # Successfully found null direction
             else:
                 # If we didn't converge, use the final v as approximation
-                null_directions.append(v.clone())
+                # Offload to CPU immediately to save GPU memory
+                null_directions.append(v.cpu().clone())
         
         return null_directions
     
@@ -533,12 +558,29 @@ class HessianAwareCatalyst:
             with torch.no_grad():
                 distances = torch.cdist(embeddings_flat, embedding_weight)
                 catalyst_ids = distances.argmin(dim=-1).view(embeddings.shape[:2])
+            
+            # Clear memory periodically during catalyst generation
+            if step % 10 == 0:
+                if hasattr(self.model, 'zero_grad'):
+                    self.model.zero_grad()
+                if self.device == "cuda" and torch.cuda.is_available():
+                    torch.cuda.empty_cache()
         
         # Convert final embeddings back to token IDs using nearest neighbor
         embeddings_flat = embeddings.view(-1, embeddings.size(-1))
         with torch.no_grad():
             distances = torch.cdist(embeddings_flat, embedding_weight)
             catalyst_ids = distances.argmin(dim=-1).view(embeddings.shape[:2])
+        
+        # Clear gradients and free memory after catalyst generation
+        if hasattr(self.model, 'zero_grad'):
+            self.model.zero_grad()
+        try:
+            del embeddings, embeddings_flat, distances, projection, grad_emb
+        except NameError:
+            pass
+        if self.device == "cuda" and torch.cuda.is_available():
+            torch.cuda.empty_cache()
         
         self.model.eval()  # Reset to eval mode
         return catalyst_ids.detach()

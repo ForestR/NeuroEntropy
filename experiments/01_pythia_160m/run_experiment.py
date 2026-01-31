@@ -25,7 +25,15 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from src.catalyst import HessianAwareCatalyst
 from src.attack_loop import MetabolicAttackLoop
 from src.diagnosis import diagnose_model_health, ActivationHook
-from src.config import ExperimentConfig, get_pythia_160m_config, get_pythia_70m_config, get_pythia_410m_config
+from src.config import (
+    ExperimentConfig,
+    get_pythia_160m_config,
+    get_pythia_70m_config,
+    get_pythia_410m_config,
+    get_pythia_1b_config,
+    get_pythia_1_4b_config,
+    get_pythia_2_8b_config,
+)
 from src.utils.logger import ExperimentLogger
 from src.utils.visualizer import plot_rank_collapse, plot_rank_reduction, plot_spectral_decay
 from experiments.utils.evaluate import compute_perplexity, create_simple_test_set
@@ -62,6 +70,20 @@ def load_model(config: ExperimentConfig, device: str, verbosity: str = 'normal')
         model = AutoModelForCausalLM.from_pretrained(
             config.model.hf_model_id
         ).to(device)
+    
+    # Enable gradient checkpointing for FFT mode (required for 1B+ models)
+    if getattr(config.model, 'use_gradient_checkpointing', False):
+        if hasattr(model, 'gradient_checkpointing_enable'):
+            model.gradient_checkpointing_enable()
+            vprint("Gradient checkpointing enabled", 'normal', verbosity)
+        else:
+            vprint("Warning: Model does not support gradient checkpointing", 'quiet', verbosity)
+    
+    # Enable all parameters for training in FFT mode
+    if getattr(config.model, 'use_fft', False):
+        for param in model.parameters():
+            param.requires_grad = True
+        vprint("Full Fine-Tuning mode: All parameters trainable", 'normal', verbosity)
     
     model.eval()
     return model, tokenizer
@@ -230,7 +252,8 @@ def run_treatment_group(
     results = attack_loop.run_attack_cycle(
         num_iterations=config.attack.num_steps,
         target_rank_reduction=config.attack.target_rank_reduction,
-        learning_rate=config.attack.learning_rate
+        learning_rate=config.attack.learning_rate,
+        catalyst_length=config.attack.catalyst_length
     )
     
     return {
@@ -281,32 +304,41 @@ def run_single_experiment(
     # Load model
     model, tokenizer = load_model(config, args.device, verbosity=verbosity)
 
+    # Keep baseline state in memory when not saving checkpoints (for reset before treatment)
+    baseline_state_dict = None
+
     # Resume from checkpoint if specified, otherwise save baseline checkpoint
     if args.resume_from_checkpoint:
+        if not args.save_checkpoints:
+            vprint("Note: --save-checkpoints is False; resuming from specified path only.", 'quiet', verbosity)
         logger.load_checkpoint(
             checkpoint_path=args.resume_from_checkpoint,
             model=model
         )
         vprint(f"Resumed from checkpoint: {args.resume_from_checkpoint}", 'quiet', verbosity)
     else:
-        # Always save initial model state (baseline checkpoint)
-        baseline_checkpoint_path = logger.checkpoint_dir / "checkpoint_baseline.pt"
-        torch.save({
-            'step': 0,
-            'model_state_dict': model.state_dict(),
-            'checkpoint_type': 'baseline',
-            'description': 'Initial model state before any modifications'
-        }, baseline_checkpoint_path)
-        # Also save using logger for consistency
-        logger.save_checkpoint(
-            step=0,
-            model=model,
-            additional_state={
+        # Save initial model state (baseline checkpoint) only if --save-checkpoints
+        if args.save_checkpoints:
+            baseline_checkpoint_path = logger.checkpoint_dir / "checkpoint_baseline.pt"
+            torch.save({
+                'step': 0,
+                'model_state_dict': model.state_dict(),
                 'checkpoint_type': 'baseline',
                 'description': 'Initial model state before any modifications'
-            }
-        )
-        vprint("Baseline model checkpoint saved to disk", 'quiet', verbosity)
+            }, baseline_checkpoint_path)
+            # Also save using logger for consistency
+            logger.save_checkpoint(
+                step=0,
+                model=model,
+                additional_state={
+                    'checkpoint_type': 'baseline',
+                    'description': 'Initial model state before any modifications'
+                }
+            )
+            vprint("Baseline model checkpoint saved to disk", 'quiet', verbosity)
+        else:
+            # Keep baseline in memory so we can reset before treatment when control group runs
+            baseline_state_dict = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
 
     # 1. Baseline measurement
     vprint("\n" + "=" * 50, 'normal', verbosity)
@@ -323,7 +355,7 @@ def run_single_experiment(
 
     # 2. Control group (optional)
     if not args.skip_control:
-        # Reset to baseline before control group
+        # Reset to baseline before control group (only if we have a saved or in-memory baseline)
         baseline_checkpoint_path = logger.checkpoint_dir / "checkpoint_baseline.pt"
         if baseline_checkpoint_path.exists():
             logger.load_checkpoint(
@@ -331,6 +363,10 @@ def run_single_experiment(
                 model=model
             )
             vprint("Model reset to baseline state before control group", 'quiet', verbosity)
+        elif baseline_state_dict is not None:
+            # Restore from in-memory baseline (--save-checkpoints was False)
+            model.load_state_dict({k: v.to(args.device) for k, v in baseline_state_dict.items()})
+            vprint("Model reset to baseline state before control group (from memory)", 'quiet', verbosity)
 
         vprint("\n" + "=" * 50, 'normal', verbosity)
         vprint("PHASE 2: Control Group (Random Noise)", 'normal', verbosity)
@@ -353,23 +389,24 @@ def run_single_experiment(
             save_path=str(logger.get_log_path() / "control_rank_collapse.png")
         )
 
-        # Save checkpoint after control group
-        post_control_checkpoint_path = logger.checkpoint_dir / "checkpoint_post_control.pt"
-        torch.save({
-            'step': config.attack.num_steps,
-            'model_state_dict': model.state_dict(),
-            'checkpoint_type': 'post_control',
-            'description': 'Model state after control group (random noise)'
-        }, post_control_checkpoint_path)
-        logger.save_checkpoint(
-            step=config.attack.num_steps,
-            model=model,
-            additional_state={
+        # Save checkpoint after control group only if --save-checkpoints
+        if args.save_checkpoints:
+            post_control_checkpoint_path = logger.checkpoint_dir / "checkpoint_post_control.pt"
+            torch.save({
+                'step': config.attack.num_steps,
+                'model_state_dict': model.state_dict(),
                 'checkpoint_type': 'post_control',
                 'description': 'Model state after control group (random noise)'
-            }
-        )
-        vprint("Post-control checkpoint saved", 'quiet', verbosity)
+            }, post_control_checkpoint_path)
+            logger.save_checkpoint(
+                step=config.attack.num_steps,
+                model=model,
+                additional_state={
+                    'checkpoint_type': 'post_control',
+                    'description': 'Model state after control group (random noise)'
+                }
+            )
+            vprint("Post-control checkpoint saved", 'quiet', verbosity)
 
     # 3. Treatment group
     vprint("\n" + "=" * 50, 'normal', verbosity)
@@ -384,6 +421,16 @@ def run_single_experiment(
             model=model
         )
         vprint("Model reset to baseline state before treatment group", 'quiet', verbosity)
+    elif baseline_state_dict is not None:
+        # Restore from in-memory baseline (--save-checkpoints was False)
+        model.load_state_dict({k: v.to(args.device) for k, v in baseline_state_dict.items()})
+        vprint("Model reset to baseline state before treatment group (from memory)", 'quiet', verbosity)
+    else:
+        vprint(
+            "Warning: No baseline checkpoint (file or memory); treatment runs on current model state.",
+            'normal',
+            verbosity,
+        )
 
     treatment = run_treatment_group(model, tokenizer, args.device, config, verbosity=verbosity)
 
@@ -407,23 +454,24 @@ def run_single_experiment(
         save_path=str(logger.get_log_path() / "treatment_rank_reduction.png")
     )
 
-    # Save checkpoint after treatment group
-    post_treatment_checkpoint_path = logger.checkpoint_dir / "checkpoint_post_treatment.pt"
-    torch.save({
-        'step': config.attack.num_steps,
-        'model_state_dict': model.state_dict(),
-        'checkpoint_type': 'post_treatment',
-        'description': 'Model state after treatment group (Eigen-Prion attack)'
-    }, post_treatment_checkpoint_path)
-    logger.save_checkpoint(
-        step=config.attack.num_steps,
-        model=model,
-        additional_state={
+    # Save checkpoint after treatment group only if --save-checkpoints
+    if args.save_checkpoints:
+        post_treatment_checkpoint_path = logger.checkpoint_dir / "checkpoint_post_treatment.pt"
+        torch.save({
+            'step': config.attack.num_steps,
+            'model_state_dict': model.state_dict(),
             'checkpoint_type': 'post_treatment',
             'description': 'Model state after treatment group (Eigen-Prion attack)'
-        }
-    )
-    vprint("Post-treatment checkpoint saved", 'quiet', verbosity)
+        }, post_treatment_checkpoint_path)
+        logger.save_checkpoint(
+            step=config.attack.num_steps,
+            model=model,
+            additional_state={
+                'checkpoint_type': 'post_treatment',
+                'description': 'Model state after treatment group (Eigen-Prion attack)'
+            }
+        )
+        vprint("Post-treatment checkpoint saved", 'quiet', verbosity)
 
     # 4. Post-attack measurement
     vprint("\n" + "=" * 50, 'normal', verbosity)
@@ -531,7 +579,7 @@ def main():
     parser.add_argument(
         '--model',
         type=str,
-        choices=['70m', '160m', '410m'],
+        choices=['70m', '160m', '410m', '1b', '1.4b', '2.8b'],
         default='160m',
         help='Model size to use'
     )
@@ -590,6 +638,17 @@ def main():
         default=None,
         help='Random seed for reproducibility (overrides config)'
     )
+    parser.add_argument(
+        '--save-checkpoints',
+        action='store_true',
+        default=False,
+        help='Save checkpoint files to disk (default: False, saves disk space)'
+    )
+    parser.add_argument(
+        '--force-fft',
+        action='store_true',
+        help='Force Full Fine-Tuning mode (disable LoRA, enable gradient checkpointing)'
+    )
     
     args = parser.parse_args()
     
@@ -603,6 +662,12 @@ def main():
             config = get_pythia_160m_config()
         elif args.model == '410m':
             config = get_pythia_410m_config()
+        elif args.model == '1b':
+            config = get_pythia_1b_config()
+        elif args.model == '1.4b':
+            config = get_pythia_1_4b_config()
+        elif args.model == '2.8b':
+            config = get_pythia_2_8b_config()
         else:
             raise ValueError(f"Unknown model: {args.model}")
     
@@ -622,6 +687,10 @@ def main():
     
     if args.seed is not None:
         config.seed = args.seed
+    
+    if args.force_fft:
+        config.model.use_fft = True
+        config.model.use_gradient_checkpointing = True
 
     # Storage for multi-run results
     all_results = []
@@ -633,11 +702,14 @@ def main():
     vprint(f"Quantization: {args.quantization or 'from config'}", 'normal', args.verbosity)
     vprint(f"Number of runs: {args.num_runs}", 'normal', args.verbosity)
     vprint(f"Seed: {config.seed}", 'normal', args.verbosity)
+    vprint(f"Save checkpoints: {args.save_checkpoints}", 'normal', args.verbosity)
 
     # Run experiments
     for run_num in range(1, args.num_runs + 1):
+        actual_seed = config.seed + run_num
         vprint(f"\n{'#'*50}", 'normal', args.verbosity)
         vprint(f"RUN {run_num}/{args.num_runs}", 'normal', args.verbosity)
+        vprint(f"Using seed: {actual_seed} (base_seed={config.seed} + run_number={run_num})", 'normal', args.verbosity)
         vprint(f"{'#'*50}", 'normal', args.verbosity)
 
         try:

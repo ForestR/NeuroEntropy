@@ -1,0 +1,5 @@
+model_name,model_size,model_size_millions,num_runs,mean_rank_reduction_pct,std_dev_rank_reduction_pct,min_rank_reduction_pct,max_rank_reduction_pct,mean_baseline_rank,mean_post_attack_rank
+70m,70000000.0000,70.0000,10,2.9750,3.0399,0.0300,9.7200,3.3187,3.4173
+160m,160000000.0000,160.0000,10,4.0680,6.6470,0.1100,22.1600,2.8591,2.9307
+410m,410000000.0000,410.0000,10,5.8160,3.9580,2.3700,13.0200,2.3953,2.4421
+1b,1000000000.0000,1000.0000,10,26.4460,13.2664,4.1600,46.0700,2.5515,2.7773

@@ -9,7 +9,19 @@
     "min_rank_reduction_pct": 0.03,
     "max_rank_reduction_pct": 9.72,
     "mean_baseline_rank": 3.3187,
-    "mean_post_attack_rank": 3.4173
+    "mean_post_attack_rank": 3.4173,
+    "mean_baseline_perplexity": 2739.90865193099,
+    "std_dev_baseline_perplexity": 0.0,
+    "min_baseline_perplexity": 2739.90865193099,
+    "max_baseline_perplexity": 2739.90865193099,
+    "mean_post_attack_perplexity": 145436.79651490346,
+    "std_dev_post_attack_perplexity": 179459.78827611773,
+    "min_post_attack_perplexity": 22105.5791705912,
+    "max_post_attack_perplexity": 515114.7838437845,
+    "mean_perplexity_increase_pct": 5208.089246420855,
+    "std_dev_perplexity_increase_pct": 6549.845672761422,
+    "min_perplexity_increase_pct": 706.7998600979627,
+    "max_perplexity_increase_pct": 18700.436411657374
   },
   {
     "model_name": "160m",
@@ -21,7 +33,19 @@
     "min_rank_reduction_pct": 0.11,
     "max_rank_reduction_pct": 22.16,
     "mean_baseline_rank": 2.8591,
-    "mean_post_attack_rank": 2.9306900000000002
+    "mean_post_attack_rank": 2.9306900000000002,
+    "mean_baseline_perplexity": 2539.743832226695,
+    "std_dev_baseline_perplexity": 0.0,
+    "min_baseline_perplexity": 2539.743832226695,
+    "max_baseline_perplexity": 2539.743832226695,
+    "mean_post_attack_perplexity": 2893275566386.8345,
+    "std_dev_post_attack_perplexity": 9149242513234.277,
+    "min_post_attack_perplexity": 2673.47156289902,
+    "max_post_attack_perplexity": 28932476251863.13,
+    "mean_perplexity_increase_pct": 113919975988.69807,
+    "std_dev_perplexity_increase_pct": 360242729882.4375,
+    "min_perplexity_increase_pct": 5.26540232032301,
+    "max_perplexity_increase_pct": 1139188759204.7869
   },
   {
     "model_name": "410m",
@@ -33,7 +57,19 @@
     "min_rank_reduction_pct": 2.37,
     "max_rank_reduction_pct": 13.02,
     "mean_baseline_rank": 2.3953,
-    "mean_post_attack_rank": 2.44208
+    "mean_post_attack_rank": 2.44208,
+    "mean_baseline_perplexity": 5206.920241275732,
+    "std_dev_baseline_perplexity": 0.0,
+    "min_baseline_perplexity": 5206.920241275732,
+    "max_baseline_perplexity": 5206.920241275732,
+    "mean_post_attack_perplexity": 510711.63225458976,
+    "std_dev_post_attack_perplexity": 606432.3068247227,
+    "min_post_attack_perplexity": 55918.441707909056,
+    "max_post_attack_perplexity": 1887967.8747139287,
+    "mean_perplexity_increase_pct": 9708.324471846756,
+    "std_dev_perplexity_increase_pct": 11646.660189212778,
+    "min_perplexity_increase_pct": 973.9254514528275,
+    "max_perplexity_increase_pct": 36158.82070840715
   },
   {
     "model_name": "1b",
@@ -45,6 +81,18 @@
     "min_rank_reduction_pct": 4.16,
     "max_rank_reduction_pct": 46.07,
     "mean_baseline_rank": 2.5515,
-    "mean_post_attack_rank": 2.77732
+    "mean_post_attack_rank": 2.77732,
+    "mean_baseline_perplexity": 6391.334123672747,
+    "std_dev_baseline_perplexity": 0.0,
+    "min_baseline_perplexity": 6391.334123672747,
+    "max_baseline_perplexity": 6391.334123672747,
+    "mean_post_attack_perplexity": 1884959.3719430682,
+    "std_dev_post_attack_perplexity": 2709642.1155188195,
+    "min_post_attack_perplexity": 54146.16619531186,
+    "max_post_attack_perplexity": 8462819.911255335,
+    "mean_perplexity_increase_pct": 29392.42420234926,
+    "std_dev_perplexity_increase_pct": 42395.563478407814,
+    "min_perplexity_increase_pct": 747.1809664082629,
+    "max_perplexity_increase_pct": 132310.8511227734
   }
 ]

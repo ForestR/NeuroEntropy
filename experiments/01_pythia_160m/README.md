@@ -104,10 +104,80 @@ This ensures each repetition uses a different random seed for proper statistical
 - `--verbosity {quiet,normal,verbose}`: Output verbosity level
 - `--output-dir PATH`: Output directory for results
 
+## Data Analysis
+
+After running experiments, use `analyze_priority1.py` to generate scaling law visualizations and summary statistics.
+
+### Basic Usage
+
+Generate scaling law analysis without outlier filtering:
+
+```bash
+python experiments/01_pythia_160m/analyze_priority1.py \
+    --results-dir ./experiments/results/ \
+    --models 70m 160m 410m 1b \
+    --output-dir ./experiments/results/scaling_law_analysis/
+```
+
+### With Outlier Filtering
+
+Filter outliers using **IQR (Interquartile Range)** method based on perplexity increase:
+
+```bash
+python experiments/01_pythia_160m/analyze_priority1.py \
+    --results-dir ./experiments/results/ \
+    --models 70m 160m 410m 1b \
+    --output-dir ./experiments/results/scaling_law_analysis/ \
+    --filter-method iqr \
+    --filter-metric perplexity_increase \
+    --filter-iqr-multiplier 1.5
+```
+
+Filter outliers using **Z-score** method based on rank reduction:
+
+```bash
+python experiments/01_pythia_160m/analyze_priority1.py \
+    --results-dir ./experiments/results/ \
+    --models 70m 160m 410m 1b \
+    --output-dir ./experiments/results/scaling_law_analysis/ \
+    --filter-method zscore \
+    --filter-metric rank_reduction \
+    --filter-zscore-threshold 3.0
+```
+
+### Analysis Script Options
+
+- `--results-dir PATH`: Path to results directory (default: `./experiments/results/`)
+- `--models MODEL1 MODEL2 ...`: List of models to analyze (default: `70m 160m 410m 1b`)
+- `--output-dir PATH`: Output directory for plots and reports (default: `./experiments/results/scaling_law_analysis/`)
+- `--use-absolute`: Use absolute values for structural damage (default: True)
+- `--no-absolute`: Use signed values for structural damage
+- `--filter-method {iqr,zscore}`: Outlier filtering method
+- `--filter-metric {rank_reduction,perplexity_increase,perplexity_post}`: Metric to filter on (default: `rank_reduction`)
+- `--filter-iqr-multiplier FLOAT`: IQR multiplier for outlier detection (default: 1.5)
+- `--filter-zscore-threshold FLOAT`: Z-score threshold for outlier detection (default: 3.0)
+
+### Output Files
+
+The analysis script generates:
+
+- `scaling_law_summary.csv`: Summary statistics table (CSV format)
+- `scaling_law_summary.json`: Summary statistics with filtering metadata (JSON format)
+- `scaling_law_curve.png`: Scaling law visualization plot
+
+**Filtering Information:**
+
+When filtering is applied, the JSON output includes filtering metadata:
+- Number of filtered outliers per model
+- Filtering method and metric used
+- Indices of removed runs
+- Original vs. filtered statistics
+
 ## Results
 
 Results are saved to `experiments/results/` with the following structure:
 - `pythia_<SIZE>_pythia-<SIZE>_run<NN>_fp16/`: Individual run results
 - `aggregate_summary_*.csv`: Aggregated statistics across runs
+- `scaling_law_analysis/`: Analysis outputs (summary tables, plots)
 
 Results will be documented here as experiments progress.

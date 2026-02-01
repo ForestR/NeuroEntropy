@@ -75,7 +75,8 @@ class MetabolicAttackLoop:
         catalyst_tokens: Optional[torch.Tensor] = None,
         target_rank_reduction: float = 0.5,
         learning_rate: float = 1e-4,
-        catalyst_length: int = 64
+        catalyst_length: int = 64,
+        optimizer_type: str = 'adamw'
     ) -> Dict:
         """
         Run a single attack cycle.
@@ -86,6 +87,7 @@ class MetabolicAttackLoop:
             target_rank_reduction: Target reduction in effective rank
             learning_rate: Learning rate for parameter updates
             catalyst_length: Length of catalyst sequence in tokens
+            optimizer_type: Type of optimizer to use ('adamw' or 'sgd')
             
         Returns:
             attack_results: Dictionary with attack metrics
@@ -104,40 +106,55 @@ class MetabolicAttackLoop:
             if self.device == "cuda" and torch.cuda.is_available():
                 torch.cuda.empty_cache()
         
-        # Initialize optimizer for memory efficiency
-        # Option 2 (PI directive): Use Adafactor for zero optimizer state memory overhead
-        # This eliminates the ~2.8 GB optimizer state memory for 1.4B models
+        # Initialize optimizer based on type
         trainable_params = [p for p in self.model.parameters() if p.requires_grad]
         if trainable_params:
-            if ADAFACTOR_AVAILABLE:
-                # Adafactor: Zero optimizer state overhead (stores row/column sums instead of full states)
-                # Trade-off: Slightly slower convergence, but acceptable for 100-step attack
-                optimizer = Adafactor(
+            if optimizer_type == 'sgd':
+                # Priority 3: SGD without momentum or adaptive learning rate
+                optimizer = torch.optim.SGD(
                     trainable_params,
                     lr=learning_rate,
-                    relative_step=False,  # Use fixed learning rate
-                    scale_parameter=False,  # Disable parameter scaling
-                    warmup_init=False
+                    momentum=0.0,  # No momentum (per Priority 3 spec)
+                    dampening=0.0,
+                    weight_decay=0.0,
+                    nesterov=False
                 )
-                print(f"Using Adafactor optimizer (zero optimizer state overhead) for {len(trainable_params)} trainable parameters")
-            elif BITSANDBYTES_AVAILABLE:
-                # Fallback: 8-bit AdamW optimizer (saves ~8.4 GB VRAM vs FP32 Adam)
-                optimizer = bnb.optim.AdamW8bit(
-                    trainable_params,
-                    lr=learning_rate,
-                    betas=(0.9, 0.999),
-                    eps=1e-8
-                )
-                print(f"Using AdamW8bit optimizer (8-bit optimizer states) for {len(trainable_params)} trainable parameters")
+                print(f"Using SGD optimizer (no momentum, no adaptive LR) for {len(trainable_params)} trainable parameters")
+            elif optimizer_type == 'adamw':
+                # Existing AdamW selection logic (Adafactor -> AdamW8bit -> AdamW)
+                # Option 2 (PI directive): Use Adafactor for zero optimizer state memory overhead
+                # This eliminates the ~2.8 GB optimizer state memory for 1.4B models
+                if ADAFACTOR_AVAILABLE:
+                    # Adafactor: Zero optimizer state overhead (stores row/column sums instead of full states)
+                    # Trade-off: Slightly slower convergence, but acceptable for 100-step attack
+                    optimizer = Adafactor(
+                        trainable_params,
+                        lr=learning_rate,
+                        relative_step=False,  # Use fixed learning rate
+                        scale_parameter=False,  # Disable parameter scaling
+                        warmup_init=False
+                    )
+                    print(f"Using Adafactor optimizer (zero optimizer state overhead) for {len(trainable_params)} trainable parameters")
+                elif BITSANDBYTES_AVAILABLE:
+                    # Fallback: 8-bit AdamW optimizer (saves ~8.4 GB VRAM vs FP32 Adam)
+                    optimizer = bnb.optim.AdamW8bit(
+                        trainable_params,
+                        lr=learning_rate,
+                        betas=(0.9, 0.999),
+                        eps=1e-8
+                    )
+                    print(f"Using AdamW8bit optimizer (8-bit optimizer states) for {len(trainable_params)} trainable parameters")
+                else:
+                    # Final fallback: Standard AdamW if neither Adafactor nor bitsandbytes available
+                    optimizer = torch.optim.AdamW(
+                        trainable_params,
+                        lr=learning_rate,
+                        betas=(0.9, 0.999),
+                        eps=1e-8
+                    )
+                    print(f"Using standard AdamW optimizer (FP32 optimizer states) for {len(trainable_params)} trainable parameters")
             else:
-                # Final fallback: Standard AdamW if neither Adafactor nor bitsandbytes available
-                optimizer = torch.optim.AdamW(
-                    trainable_params,
-                    lr=learning_rate,
-                    betas=(0.9, 0.999),
-                    eps=1e-8
-                )
-                print(f"Using standard AdamW optimizer (FP32 optimizer states) for {len(trainable_params)} trainable parameters")
+                raise ValueError(f"Unknown optimizer type: {optimizer_type}. Must be 'adamw' or 'sgd'")
         else:
             optimizer = None
             print("Warning: No trainable parameters found, optimizer not initialized")

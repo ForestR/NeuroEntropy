@@ -1,0 +1,4 @@
+run,baseline_rank,post_attack_rank,rank_reduction_pct
+1,2.3953,2.3395,2.33
+2,2.3953,2.3224,3.04
+3,2.3953,2.3033,3.84

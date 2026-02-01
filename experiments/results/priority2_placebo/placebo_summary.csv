@@ -1,0 +1,4 @@
+treatment,mean_rank_reduction_pct,std_dev_rank_reduction_pct,min_rank_reduction_pct,max_rank_reduction_pct,num_runs
+eigen_prion,6.1400,5.4670,2.3700,12.4100,3
+gaussian_noise,3.0700,0.7554,2.3300,3.8400,3
+random_text,1.5000,0.0000,1.5000,1.5000,3

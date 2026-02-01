@@ -1,0 +1,56 @@
+{
+  "summary": [
+    {
+      "treatment": "eigen_prion",
+      "mean_rank_reduction_pct": 6.140000000000001,
+      "std_dev_rank_reduction_pct": 5.466982714441303,
+      "min_rank_reduction_pct": 2.37,
+      "max_rank_reduction_pct": 12.41,
+      "num_runs": 3
+    },
+    {
+      "treatment": "gaussian_noise",
+      "mean_rank_reduction_pct": 3.07,
+      "std_dev_rank_reduction_pct": 0.7554468876102408,
+      "min_rank_reduction_pct": 2.33,
+      "max_rank_reduction_pct": 3.84,
+      "num_runs": 3
+    },
+    {
+      "treatment": "random_text",
+      "mean_rank_reduction_pct": 1.5,
+      "std_dev_rank_reduction_pct": 0.0,
+      "min_rank_reduction_pct": 1.5,
+      "max_rank_reduction_pct": 1.5,
+      "num_runs": 3
+    }
+  ],
+  "statistical_tests": {
+    "anova": {
+      "f_statistic": 1.6237688102276573,
+      "p_value": 0.2731337898885851,
+      "significant": false,
+      "error": null
+    },
+    "pairwise": {
+      "eigen_prion vs gaussian_noise": {
+        "p_value": 0.222584333980616
+      },
+      "eigen_prion vs random_text": {
+        "p_value": 0.6610219724360741
+      },
+      "gaussian_noise vs random_text": {
+        "p_value": 0.00046896146711720565
+      }
+    }
+  },
+  "metadata": {
+    "significance_markers": {
+      "***": "p < 0.001 (highly significant)",
+      "**": "p < 0.01 (very significant)",
+      "*": "p < 0.05 (significant)",
+      "ns": "p >= 0.05 (not significant)"
+    },
+    "note": "Significance markers (***, **, *, ns) are used in console output and plots to indicate statistical significance levels"
+  }
+}

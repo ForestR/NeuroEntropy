@@ -246,3 +246,70 @@ def create_simple_test_set(num_examples: int = 100) -> List[str]:
         texts.append(base_text)
     
     return texts
+
+
+def load_random_pile_texts(num_samples: int = 100, seed: int = 42) -> List[str]:
+    """
+    Load random texts from The Pile dataset.
+    
+    This function loads a subset of The Pile dataset and samples random texts
+    for use as control group data in experiments.
+    
+    Args:
+        num_samples: Number of random texts to sample
+        seed: Random seed for reproducibility
+        
+    Returns:
+        texts: List of random text strings from The Pile dataset
+        
+    Note:
+        Requires the 'datasets' library to be installed.
+        The function loads a small subset of The Pile to avoid memory issues.
+    """
+    try:
+        from datasets import load_dataset
+        import random
+    except ImportError:
+        print("Warning: 'datasets' library not available. Install with: pip install datasets")
+        return []
+    
+    try:
+        # Load a subset of The Pile dataset
+        # Using 'pile' subset which is more manageable
+        # We'll load a small portion to avoid memory issues
+        dataset = load_dataset("EleutherAI/pile", split="train", streaming=True)
+        
+        # Set random seed
+        random.seed(seed)
+        np.random.seed(seed)
+        
+        # Sample texts from the dataset
+        texts = []
+        seen_indices = set()
+        
+        # Convert to list for random sampling (limit to first 10000 for memory)
+        dataset_list = []
+        for i, example in enumerate(dataset):
+            if i >= 10000:  # Limit to avoid memory issues
+                break
+            # Extract text field (The Pile has 'text' field)
+            if 'text' in example:
+                text = example['text']
+                if isinstance(text, str) and len(text.strip()) > 10:  # Filter empty/short texts
+                    dataset_list.append(text)
+        
+        # Randomly sample from the collected texts
+        if len(dataset_list) == 0:
+            print("Warning: No texts found in Pile dataset. Using fallback simple texts.")
+            return create_simple_test_set(num_samples)
+        
+        # Sample without replacement
+        sampled_indices = random.sample(range(len(dataset_list)), min(num_samples, len(dataset_list)))
+        texts = [dataset_list[i] for i in sampled_indices]
+        
+        return texts
+        
+    except Exception as e:
+        print(f"Warning: Could not load Pile dataset: {e}")
+        print("Falling back to simple test set.")
+        return create_simple_test_set(num_samples)

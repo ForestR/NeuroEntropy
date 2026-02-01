@@ -219,16 +219,205 @@ def run_control_group(
     return history
 
 
+def run_gaussian_noise_control(
+    model,
+    tokenizer,
+    device: str,
+    num_steps: int = 100,
+    learning_rate: float = 1e-4,
+    catalyst_length: int = 64,
+    verbosity: str = 'normal'
+) -> list:
+    """Run control group: inject pure Gaussian noise vectors into embedding space."""
+    vprint(f"Running Gaussian noise control: {num_steps} steps...", 'normal', verbosity)
+    
+    model.train()
+    history = []
+    
+    # Get embedding layer to access embedding dimension
+    embedding_layer = model.get_input_embeddings()
+    embedding_dim = embedding_layer.embedding_dim
+    
+    for step in range(num_steps):
+        # Generate pure Gaussian noise vectors (not token IDs)
+        # Shape: (batch_size, sequence_length-1, embedding_dim) for inputs_embeds
+        seq_len = catalyst_length - 1  # -1 because we need labels
+        gaussian_noise = torch.randn(
+            1, seq_len, embedding_dim,
+            device=device,
+            dtype=embedding_layer.weight.dtype
+        )
+        
+        # Normalize to match typical embedding scale
+        # Embeddings are typically normalized or scaled
+        gaussian_noise = gaussian_noise * 0.1  # Scale factor to match embedding magnitudes
+        
+        # Create dummy labels for loss computation (random tokens)
+        vocab_size = len(tokenizer)
+        labels = torch.randint(
+            0, vocab_size,
+            (1, seq_len),
+            device=device
+        )
+        
+        # Forward pass with Gaussian noise embeddings directly
+        outputs = model(inputs_embeds=gaussian_noise, labels=labels)
+        loss = outputs.loss
+        
+        if torch.isfinite(loss):
+            loss.backward()
+            
+            # Update parameters
+            with torch.no_grad():
+                for param in model.parameters():
+                    if param.requires_grad and param.grad is not None:
+                        param.data -= learning_rate * param.grad
+                        param.grad.zero_()
+        
+        # Measure rank periodically
+        if step % 10 == 0:
+            model.eval()
+            hook = ActivationHook()
+            try:
+                hook.register(model)
+                with torch.no_grad():
+                    # Use a simple test input for rank measurement
+                    test_input = tokenizer(
+                        "The quick brown fox jumps over the lazy dog.",
+                        return_tensors="pt",
+                        max_length=128,
+                        truncation=True,
+                        padding='max_length'
+                    ).to(device)
+                    _ = model(**test_input)
+                activations = hook.get_activations()
+                hook.clear()
+                
+                if activations is not None:
+                    from src.diagnosis import compute_effective_rank
+                    rank = compute_effective_rank(activations)
+                else:
+                    rank = 0.0
+            except Exception as e:
+                vprint(f"Warning: Could not measure rank at step {step}: {e}", 'quiet', verbosity)
+                rank = 0.0
+            
+            history.append({
+                'iteration': step,
+                'effective_rank': rank,
+                'loss': loss.item() if torch.isfinite(loss) else float('inf')
+            })
+            model.train()
+    
+    model.eval()
+    return history
+
+
+def run_random_text_control(
+    model,
+    tokenizer,
+    device: str,
+    num_steps: int = 100,
+    learning_rate: float = 1e-4,
+    catalyst_length: int = 64,
+    verbosity: str = 'normal'
+) -> list:
+    """Run control group: fine-tune on random texts from Pile dataset."""
+    vprint(f"Running random text control: {num_steps} steps...", 'normal', verbosity)
+    
+    # Import here to avoid dependency if not needed
+    try:
+        from experiments.utils.evaluate import load_random_pile_texts
+    except ImportError:
+        vprint("Error: load_random_pile_texts not available. Install datasets library.", 'normal', verbosity)
+        return []
+    
+    # Load random texts from Pile
+    random_texts = load_random_pile_texts(num_samples=num_steps, seed=42)
+    
+    if not random_texts:
+        vprint("Warning: No random texts loaded. Skipping control group.", 'normal', verbosity)
+        return []
+    
+    model.train()
+    history = []
+    
+    for step in range(min(num_steps, len(random_texts))):
+        # Get random text
+        text = random_texts[step]
+        
+        # Tokenize
+        inputs = tokenizer(
+            text,
+            return_tensors="pt",
+            max_length=catalyst_length,
+            truncation=True,
+            padding='max_length'
+        ).to(device)
+        
+        input_ids = inputs['input_ids']
+        if input_ids.size(1) < 2:
+            continue
+        
+        # Prepare labels
+        labels = input_ids[:, 1:].contiguous()
+        input_ids = input_ids[:, :-1].contiguous()
+        
+        # Forward and backward pass
+        outputs = model(input_ids=input_ids, labels=labels)
+        loss = outputs.loss
+        
+        if torch.isfinite(loss):
+            loss.backward()
+            
+            # Update parameters
+            with torch.no_grad():
+                for param in model.parameters():
+                    if param.requires_grad and param.grad is not None:
+                        param.data -= learning_rate * param.grad
+                        param.grad.zero_()
+        
+        # Measure rank periodically
+        if step % 10 == 0:
+            model.eval()
+            hook = ActivationHook()
+            try:
+                hook.register(model)
+                with torch.no_grad():
+                    _ = model(input_ids=input_ids)
+                activations = hook.get_activations()
+                hook.clear()
+                
+                if activations is not None:
+                    from src.diagnosis import compute_effective_rank
+                    rank = compute_effective_rank(activations)
+                else:
+                    rank = 0.0
+            except Exception:
+                rank = 0.0
+            
+            history.append({
+                'iteration': step,
+                'effective_rank': rank,
+                'loss': loss.item() if torch.isfinite(loss) else float('inf')
+            })
+            model.train()
+    
+    model.eval()
+    return history
+
+
 def run_treatment_group(
     model,
     tokenizer,
     device: str,
     config: ExperimentConfig,
+    optimizer_type: str = 'adamw',
     verbosity: str = 'normal'
 ) -> dict:
     """Run treatment group: inject Eigen-Prion catalyst."""
     vprint(
-        f"Running treatment group: {config.attack.num_steps} steps of Eigen-Prion...",
+        f"Running treatment group: {config.attack.num_steps} steps of Eigen-Prion (optimizer: {optimizer_type})...",
         'normal',
         verbosity,
     )
@@ -248,12 +437,13 @@ def run_treatment_group(
         device=device
     )
     
-    # Run attack
+    # Run attack with specified optimizer
     results = attack_loop.run_attack_cycle(
         num_iterations=config.attack.num_steps,
         target_rank_reduction=config.attack.target_rank_reduction,
         learning_rate=config.attack.learning_rate,
-        catalyst_length=config.attack.catalyst_length
+        catalyst_length=config.attack.catalyst_length,
+        optimizer_type=optimizer_type
     )
     
     return {
@@ -288,6 +478,17 @@ def run_single_experiment(
         experiment_name += f"_{config.model.quantization_bits}bit"
     else:
         experiment_name += "_fp16"
+    
+    # Add control type suffix
+    control_type = args.control_type
+    if args.skip_control:
+        control_type = 'none'
+    if control_type != 'none':
+        experiment_name += f"_{control_type}"
+    
+    # Add optimizer suffix (only if non-default)
+    if args.optimizer != 'adamw':
+        experiment_name += f"_{args.optimizer}"
 
     # Initialize logger
     logger = ExperimentLogger(
@@ -353,125 +554,151 @@ def run_single_experiment(
         verbosity,
     )
 
-    # 2. Control group (optional)
-    if not args.skip_control:
-        # Reset to baseline before control group (only if we have a saved or in-memory baseline)
+    # 2. Control/Treatment group (routed by --control-type)
+    # Handle backward compatibility: --skip-control skips control but allows treatment
+    control_type = args.control_type
+    if args.skip_control:
+        # If skip_control is True but control_type is eigen_prion, allow treatment to run
+        # Otherwise, skip everything (backward compatibility)
+        if control_type != 'eigen_prion':
+            control_type = 'none'
+    
+    if control_type != 'none':
+        # Reset to baseline before control/treatment group
         baseline_checkpoint_path = logger.checkpoint_dir / "checkpoint_baseline.pt"
         if baseline_checkpoint_path.exists():
             logger.load_checkpoint(
                 checkpoint_path=str(baseline_checkpoint_path),
                 model=model
             )
-            vprint("Model reset to baseline state before control group", 'quiet', verbosity)
+            vprint(f"Model reset to baseline state before {control_type}", 'quiet', verbosity)
         elif baseline_state_dict is not None:
             # Restore from in-memory baseline (--save-checkpoints was False)
             model.load_state_dict({k: v.to(args.device) for k, v in baseline_state_dict.items()})
-            vprint("Model reset to baseline state before control group (from memory)", 'quiet', verbosity)
+            vprint(f"Model reset to baseline state before {control_type} (from memory)", 'quiet', verbosity)
+        else:
+            vprint(
+                f"Warning: No baseline checkpoint (file or memory); {control_type} runs on current model state.",
+                'normal',
+                verbosity,
+            )
 
-        vprint("\n" + "=" * 50, 'normal', verbosity)
-        vprint("PHASE 2: Control Group (Random Noise)", 'normal', verbosity)
-        vprint("=" * 50, 'normal', verbosity)
-        control_history = run_control_group(
-            model,
-            tokenizer,
-            args.device,
-            num_steps=config.attack.num_steps,
-            learning_rate=config.attack.learning_rate,
-            verbosity=verbosity,
-        )
+        # Route to appropriate function based on control_type
+        if control_type == 'random_tokens':
+            vprint("\n" + "=" * 50, 'normal', verbosity)
+            vprint("PHASE 2: Control Group (Random Tokens)", 'normal', verbosity)
+            vprint("=" * 50, 'normal', verbosity)
+            control_history = run_control_group(
+                model,
+                tokenizer,
+                args.device,
+                num_steps=config.attack.num_steps,
+                learning_rate=config.attack.learning_rate,
+                verbosity=verbosity,
+            )
+            prefix = "control"
+            phase_name = "Control Group (Random Tokens)"
+            
+        elif control_type == 'gaussian_noise':
+            vprint("\n" + "=" * 50, 'normal', verbosity)
+            vprint("PHASE 2: Control Group (Gaussian Noise)", 'normal', verbosity)
+            vprint("=" * 50, 'normal', verbosity)
+            control_history = run_gaussian_noise_control(
+                model,
+                tokenizer,
+                args.device,
+                num_steps=config.attack.num_steps,
+                learning_rate=config.attack.learning_rate,
+                catalyst_length=config.attack.catalyst_length,
+                verbosity=verbosity,
+            )
+            prefix = "control_gaussian"
+            phase_name = "Control Group (Gaussian Noise)"
+            
+        elif control_type == 'random_text':
+            vprint("\n" + "=" * 50, 'normal', verbosity)
+            vprint("PHASE 2: Control Group (Random Text)", 'normal', verbosity)
+            vprint("=" * 50, 'normal', verbosity)
+            control_history = run_random_text_control(
+                model,
+                tokenizer,
+                args.device,
+                num_steps=config.attack.num_steps,
+                learning_rate=config.attack.learning_rate,
+                catalyst_length=config.attack.catalyst_length,
+                verbosity=verbosity,
+            )
+            prefix = "control_random_text"
+            phase_name = "Control Group (Random Text)"
+            
+        elif control_type == 'eigen_prion':
+            vprint("\n" + "=" * 50, 'normal', verbosity)
+            vprint("PHASE 2: Treatment Group (Eigen-Prion)", 'normal', verbosity)
+            vprint("=" * 50, 'normal', verbosity)
+            treatment = run_treatment_group(
+                model, 
+                tokenizer, 
+                args.device, 
+                config, 
+                optimizer_type=args.optimizer,
+                verbosity=verbosity
+            )
+            control_history = treatment['history']
+            prefix = "treatment"
+            phase_name = "Treatment Group (Eigen-Prion)"
+        else:
+            vprint(f"Unknown control type: {control_type}", 'normal', verbosity)
+            control_history = []
+            prefix = "unknown"
+            phase_name = "Unknown"
 
-        for entry in control_history:
-            logger.log_metrics(entry['iteration'], entry, prefix="control")
+        # Log results
+        if control_type == 'eigen_prion':
+            # Treatment group returns dict with 'results' and 'history'
+            for entry in treatment['history']:
+                logger.log_metrics(entry['iteration'], entry, prefix="treatment")
+            logger.log_metrics(
+                config.attack.num_steps,
+                treatment['results'],
+                prefix="final"
+            )
+            # Plot treatment results
+            plot_rank_collapse(
+                treatment['history'],
+                save_path=str(logger.get_log_path() / "treatment_rank_collapse.png")
+            )
+            plot_rank_reduction(
+                treatment['history'],
+                save_path=str(logger.get_log_path() / "treatment_rank_reduction.png")
+            )
+        else:
+            # Control groups return list of history entries
+            for entry in control_history:
+                logger.log_metrics(entry['iteration'], entry, prefix=prefix)
+            # Plot control results
+            plot_rank_collapse(
+                control_history,
+                save_path=str(logger.get_log_path() / f"{prefix}_rank_collapse.png")
+            )
 
-        # Plot control results
-        plot_rank_collapse(
-            control_history,
-            save_path=str(logger.get_log_path() / "control_rank_collapse.png")
-        )
-
-        # Save checkpoint after control group only if --save-checkpoints
+        # Save checkpoint after control/treatment group only if --save-checkpoints
         if args.save_checkpoints:
-            post_control_checkpoint_path = logger.checkpoint_dir / "checkpoint_post_control.pt"
+            post_group_checkpoint_path = logger.checkpoint_dir / f"checkpoint_post_{prefix}.pt"
             torch.save({
                 'step': config.attack.num_steps,
                 'model_state_dict': model.state_dict(),
-                'checkpoint_type': 'post_control',
-                'description': 'Model state after control group (random noise)'
-            }, post_control_checkpoint_path)
+                'checkpoint_type': f'post_{prefix}',
+                'description': f'Model state after {phase_name}'
+            }, post_group_checkpoint_path)
             logger.save_checkpoint(
                 step=config.attack.num_steps,
                 model=model,
                 additional_state={
-                    'checkpoint_type': 'post_control',
-                    'description': 'Model state after control group (random noise)'
+                    'checkpoint_type': f'post_{prefix}',
+                    'description': f'Model state after {phase_name}'
                 }
             )
-            vprint("Post-control checkpoint saved", 'quiet', verbosity)
-
-    # 3. Treatment group
-    vprint("\n" + "=" * 50, 'normal', verbosity)
-    vprint("PHASE 3: Treatment Group (Eigen-Prion)", 'normal', verbosity)
-    vprint("=" * 50, 'normal', verbosity)
-
-    # Always reset to baseline before treatment group
-    baseline_checkpoint_path = logger.checkpoint_dir / "checkpoint_baseline.pt"
-    if baseline_checkpoint_path.exists():
-        logger.load_checkpoint(
-            checkpoint_path=str(baseline_checkpoint_path),
-            model=model
-        )
-        vprint("Model reset to baseline state before treatment group", 'quiet', verbosity)
-    elif baseline_state_dict is not None:
-        # Restore from in-memory baseline (--save-checkpoints was False)
-        model.load_state_dict({k: v.to(args.device) for k, v in baseline_state_dict.items()})
-        vprint("Model reset to baseline state before treatment group (from memory)", 'quiet', verbosity)
-    else:
-        vprint(
-            "Warning: No baseline checkpoint (file or memory); treatment runs on current model state.",
-            'normal',
-            verbosity,
-        )
-
-    treatment = run_treatment_group(model, tokenizer, args.device, config, verbosity=verbosity)
-
-    # Log treatment results
-    for entry in treatment['history']:
-        logger.log_metrics(entry['iteration'], entry, prefix="treatment")
-
-    logger.log_metrics(
-        config.attack.num_steps,
-        treatment['results'],
-        prefix="final"
-    )
-
-    # Plot treatment results
-    plot_rank_collapse(
-        treatment['history'],
-        save_path=str(logger.get_log_path() / "treatment_rank_collapse.png")
-    )
-    plot_rank_reduction(
-        treatment['history'],
-        save_path=str(logger.get_log_path() / "treatment_rank_reduction.png")
-    )
-
-    # Save checkpoint after treatment group only if --save-checkpoints
-    if args.save_checkpoints:
-        post_treatment_checkpoint_path = logger.checkpoint_dir / "checkpoint_post_treatment.pt"
-        torch.save({
-            'step': config.attack.num_steps,
-            'model_state_dict': model.state_dict(),
-            'checkpoint_type': 'post_treatment',
-            'description': 'Model state after treatment group (Eigen-Prion attack)'
-        }, post_treatment_checkpoint_path)
-        logger.save_checkpoint(
-            step=config.attack.num_steps,
-            model=model,
-            additional_state={
-                'checkpoint_type': 'post_treatment',
-                'description': 'Model state after treatment group (Eigen-Prion attack)'
-            }
-        )
-        vprint("Post-treatment checkpoint saved", 'quiet', verbosity)
+            vprint(f"Post-{prefix} checkpoint saved", 'quiet', verbosity)
 
     # 4. Post-attack measurement
     vprint("\n" + "=" * 50, 'normal', verbosity)
@@ -604,7 +831,14 @@ def main():
     parser.add_argument(
         '--skip-control',
         action='store_true',
-        help='Skip control group experiment'
+        help='Skip control group experiment (deprecated: use --control-type none)'
+    )
+    parser.add_argument(
+        '--control-type',
+        type=str,
+        choices=['none', 'random_tokens', 'gaussian_noise', 'random_text', 'eigen_prion'],
+        default='eigen_prion',
+        help='Type of control/treatment to run: none (skip), random_tokens, gaussian_noise, random_text, or eigen_prion (treatment)'
     )
     parser.add_argument(
         '--resume-from-checkpoint',
@@ -648,6 +882,13 @@ def main():
         '--force-fft',
         action='store_true',
         help='Force Full Fine-Tuning mode (disable LoRA, enable gradient checkpointing)'
+    )
+    parser.add_argument(
+        '--optimizer',
+        type=str,
+        choices=['adamw', 'sgd'],
+        default='adamw',
+        help='Optimizer to use: adamw (adaptive) or sgd (no momentum, for Priority 3)'
     )
     
     args = parser.parse_args()

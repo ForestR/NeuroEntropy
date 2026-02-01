@@ -122,8 +122,13 @@ def load_experiment_data(
         csv_pattern = f"aggregate_summary_pythia_{model_name}_pythia-{model_name}_{precision}_{treatment}.csv"
         run_dir_pattern = f"pythia_{model_name}_pythia-{model_name}_run*_{precision}_{treatment}"
     elif optimizer:
-        csv_pattern = f"aggregate_summary_pythia_{model_name}_pythia-{model_name}_{precision}_{optimizer}.csv"
-        run_dir_pattern = f"pythia_{model_name}_pythia-{model_name}_run*_{precision}_{optimizer}"
+        # For AdamW (default optimizer), try without suffix first, then with suffix
+        if optimizer == 'adamw':
+            csv_pattern = f"aggregate_summary_pythia_{model_name}_pythia-{model_name}_{precision}.csv"
+            run_dir_pattern = f"pythia_{model_name}_pythia-{model_name}_run*_{precision}"
+        else:
+            csv_pattern = f"aggregate_summary_pythia_{model_name}_pythia-{model_name}_{precision}_{optimizer}.csv"
+            run_dir_pattern = f"pythia_{model_name}_pythia-{model_name}_run*_{precision}_{optimizer}"
     else:
         csv_pattern = f"aggregate_summary_pythia_{model_name}_pythia-{model_name}_{precision}.csv"
         run_dir_pattern = f"pythia_{model_name}_pythia-{model_name}_run*_{precision}"
@@ -1075,6 +1080,10 @@ def analyze_priority2_placebo(
             print(f"  Found {stats['count']} runs")
             print(f"  Mean rank reduction: {stats['mean']:.2f}% ± {stats['std_dev']:.2f}%")
             
+            # Extract perplexity data
+            baseline_perplexities = data.get("baseline_perplexities", [])
+            post_attack_perplexities = data.get("post_attack_perplexities", [])
+            
             all_treatment_data.append({
                 "treatment": treatment,
                 "mean_rank_reduction": stats["mean"],
@@ -1082,7 +1091,9 @@ def analyze_priority2_placebo(
                 "min": stats["min"],
                 "max": stats["max"],
                 "n": stats["count"],
-                "rank_reductions": data["rank_reductions"]
+                "rank_reductions": data["rank_reductions"],
+                "baseline_perplexities": baseline_perplexities,
+                "post_attack_perplexities": post_attack_perplexities
             })
             treatment_groups[treatment] = data["rank_reductions"]
         else:
@@ -1112,14 +1123,46 @@ def analyze_priority2_placebo(
     # Generate summary DataFrame
     summary_rows = []
     for td in all_treatment_data:
-        summary_rows.append({
+        summary_row = {
             "treatment": td["treatment"],
             "mean_rank_reduction_pct": td["mean_rank_reduction"],
             "std_dev_rank_reduction_pct": td["std_dev"],
             "min_rank_reduction_pct": td["min"],
             "max_rank_reduction_pct": td["max"],
             "num_runs": td["n"]
-        })
+        }
+        
+        # Add perplexity statistics if available
+        baseline_perplexities = td.get("baseline_perplexities", [])
+        post_attack_perplexities = td.get("post_attack_perplexities", [])
+        
+        if baseline_perplexities:
+            summary_row["mean_baseline_perplexity"] = statistics.mean(baseline_perplexities)
+            summary_row["std_dev_baseline_perplexity"] = statistics.stdev(baseline_perplexities) if len(baseline_perplexities) > 1 else 0.0
+            summary_row["min_baseline_perplexity"] = min(baseline_perplexities)
+            summary_row["max_baseline_perplexity"] = max(baseline_perplexities)
+        
+        if post_attack_perplexities:
+            summary_row["mean_post_attack_perplexity"] = statistics.mean(post_attack_perplexities)
+            summary_row["std_dev_post_attack_perplexity"] = statistics.stdev(post_attack_perplexities) if len(post_attack_perplexities) > 1 else 0.0
+            summary_row["min_post_attack_perplexity"] = min(post_attack_perplexities)
+            summary_row["max_post_attack_perplexity"] = max(post_attack_perplexities)
+        
+        # Compute perplexity increase percentage if both are available
+        if baseline_perplexities and post_attack_perplexities and len(baseline_perplexities) == len(post_attack_perplexities):
+            perplexity_increases = []
+            for baseline_ppl, post_ppl in zip(baseline_perplexities, post_attack_perplexities):
+                if baseline_ppl > 0:
+                    increase_pct = ((post_ppl - baseline_ppl) / baseline_ppl) * 100
+                    perplexity_increases.append(increase_pct)
+            
+            if perplexity_increases:
+                summary_row["mean_perplexity_increase_pct"] = statistics.mean(perplexity_increases)
+                summary_row["std_dev_perplexity_increase_pct"] = statistics.stdev(perplexity_increases) if len(perplexity_increases) > 1 else 0.0
+                summary_row["min_perplexity_increase_pct"] = min(perplexity_increases)
+                summary_row["max_perplexity_increase_pct"] = max(perplexity_increases)
+        
+        summary_rows.append(summary_row)
     
     summary_df = pd.DataFrame(summary_rows)
     
@@ -1205,6 +1248,10 @@ def analyze_priority3_mechanism(
             print(f"  Found {stats['count']} runs")
             print(f"  Mean rank reduction: {stats['mean']:.2f}% ± {stats['std_dev']:.2f}%")
             
+            # Extract perplexity data
+            baseline_perplexities = data.get("baseline_perplexities", [])
+            post_attack_perplexities = data.get("post_attack_perplexities", [])
+            
             all_optimizer_data.append({
                 "optimizer": optimizer,
                 "mean_rank_reduction": stats["mean"],
@@ -1212,7 +1259,9 @@ def analyze_priority3_mechanism(
                 "min": stats["min"],
                 "max": stats["max"],
                 "n": stats["count"],
-                "rank_reductions": data["rank_reductions"]
+                "rank_reductions": data["rank_reductions"],
+                "baseline_perplexities": baseline_perplexities,
+                "post_attack_perplexities": post_attack_perplexities
             })
             optimizer_groups[optimizer] = data["rank_reductions"]
         else:
@@ -1225,12 +1274,15 @@ def analyze_priority3_mechanism(
     # Perform t-test between optimizers
     print("Performing statistical test...")
     optimizer_names = list(optimizer_groups.keys())
+    ttest_result = None
+    anova_result = None
+    p_value = None
+    
     if len(optimizer_names) == 2:
         ttest_result = perform_ttest(optimizer_groups[optimizer_names[0]], optimizer_groups[optimizer_names[1]])
         p_value = ttest_result.get("p_value")
         print(f"  t-test: t = {ttest_result.get('t_statistic', 'N/A'):.3f}, p = {format_pvalue(p_value)}")
     else:
-        p_value = None
         anova_result = perform_anova(optimizer_groups)
         p_value = anova_result.get("p_value")
         print(f"  ANOVA: F = {anova_result.get('f_statistic', 'N/A'):.3f}, p = {format_pvalue(p_value)}")
@@ -1239,14 +1291,46 @@ def analyze_priority3_mechanism(
     # Generate summary DataFrame
     summary_rows = []
     for od in all_optimizer_data:
-        summary_rows.append({
+        summary_row = {
             "optimizer": od["optimizer"],
             "mean_rank_reduction_pct": od["mean_rank_reduction"],
             "std_dev_rank_reduction_pct": od["std_dev"],
             "min_rank_reduction_pct": od["min"],
             "max_rank_reduction_pct": od["max"],
             "num_runs": od["n"]
-        })
+        }
+        
+        # Add perplexity statistics if available
+        baseline_perplexities = od.get("baseline_perplexities", [])
+        post_attack_perplexities = od.get("post_attack_perplexities", [])
+        
+        if baseline_perplexities:
+            summary_row["mean_baseline_perplexity"] = statistics.mean(baseline_perplexities)
+            summary_row["std_dev_baseline_perplexity"] = statistics.stdev(baseline_perplexities) if len(baseline_perplexities) > 1 else 0.0
+            summary_row["min_baseline_perplexity"] = min(baseline_perplexities)
+            summary_row["max_baseline_perplexity"] = max(baseline_perplexities)
+        
+        if post_attack_perplexities:
+            summary_row["mean_post_attack_perplexity"] = statistics.mean(post_attack_perplexities)
+            summary_row["std_dev_post_attack_perplexity"] = statistics.stdev(post_attack_perplexities) if len(post_attack_perplexities) > 1 else 0.0
+            summary_row["min_post_attack_perplexity"] = min(post_attack_perplexities)
+            summary_row["max_post_attack_perplexity"] = max(post_attack_perplexities)
+        
+        # Compute perplexity increase percentage if both are available
+        if baseline_perplexities and post_attack_perplexities and len(baseline_perplexities) == len(post_attack_perplexities):
+            perplexity_increases = []
+            for baseline_ppl, post_ppl in zip(baseline_perplexities, post_attack_perplexities):
+                if baseline_ppl > 0:
+                    increase_pct = ((post_ppl - baseline_ppl) / baseline_ppl) * 100
+                    perplexity_increases.append(increase_pct)
+            
+            if perplexity_increases:
+                summary_row["mean_perplexity_increase_pct"] = statistics.mean(perplexity_increases)
+                summary_row["std_dev_perplexity_increase_pct"] = statistics.stdev(perplexity_increases) if len(perplexity_increases) > 1 else 0.0
+                summary_row["min_perplexity_increase_pct"] = min(perplexity_increases)
+                summary_row["max_perplexity_increase_pct"] = max(perplexity_increases)
+        
+        summary_rows.append(summary_row)
     
     summary_df = pd.DataFrame(summary_rows)
     
@@ -1258,12 +1342,33 @@ def analyze_priority3_mechanism(
     summary_df.to_csv(csv_path, index=False, float_format='%.4f')
     print(f"Summary report (CSV) saved to: {csv_path}")
     
+    # Prepare statistical test results for JSON serialization
+    statistical_test_data = {}
+    if ttest_result:
+        statistical_test_data = {
+            "test_type": "t-test",
+            "t_statistic": float(ttest_result.get("t_statistic")) if ttest_result.get("t_statistic") is not None else None,
+            "p_value": float(ttest_result.get("p_value")) if ttest_result.get("p_value") is not None else None,
+            "significant": bool(ttest_result.get("p_value", 1.0) < 0.05) if ttest_result.get("p_value") is not None else None
+        }
+    elif anova_result:
+        statistical_test_data = {
+            "test_type": "anova",
+            "f_statistic": float(anova_result.get("f_statistic")) if anova_result.get("f_statistic") is not None else None,
+            "p_value": float(anova_result.get("p_value")) if anova_result.get("p_value") is not None else None,
+            "significant": bool(anova_result.get("p_value", 1.0) < 0.05) if anova_result.get("p_value") is not None else None,
+            "error": anova_result.get("error")
+        }
+    else:
+        statistical_test_data = {
+            "test_type": None,
+            "p_value": None,
+            "significant": None
+        }
+    
     output_data = {
         "summary": summary_rows,
-        "statistical_test": {
-            "p_value": float(p_value) if p_value is not None else None,
-            "significant": bool(p_value < 0.05) if p_value is not None else None
-        },
+        "statistical_test": statistical_test_data,
         "metadata": {
             "significance_markers": get_significance_markers_legend(),
             "note": "Significance markers (***, **, *, ns) are used in console output and plots to indicate statistical significance levels"

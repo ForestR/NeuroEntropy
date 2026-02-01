@@ -1,0 +1,3 @@
+optimizer,mean_rank_reduction_pct,std_dev_rank_reduction_pct,min_rank_reduction_pct,max_rank_reduction_pct,num_runs,mean_baseline_perplexity,std_dev_baseline_perplexity,min_baseline_perplexity,max_baseline_perplexity,mean_post_attack_perplexity,std_dev_post_attack_perplexity,min_post_attack_perplexity,max_post_attack_perplexity,mean_perplexity_increase_pct,std_dev_perplexity_increase_pct,min_perplexity_increase_pct,max_perplexity_increase_pct
+adamw,6.1400,5.4670,2.3700,12.4100,3,5206.9202,0.0000,5206.9202,5206.9202,59472.5560,4253.1189,55918.4417,64184.7834,1042.1830,81.6820,973.9255,1132.6823
+sgd,2.3733,2.5112,0.8100,5.2700,3,5206.9202,0.0000,5206.9202,5206.9202,13869.7479,3289.5873,10755.5735,17310.4016,166.3714,63.1772,106.5631,232.4499

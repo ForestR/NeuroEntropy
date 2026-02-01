@@ -1,0 +1,59 @@
+{
+  "summary": [
+    {
+      "optimizer": "adamw",
+      "mean_rank_reduction_pct": 6.140000000000001,
+      "std_dev_rank_reduction_pct": 5.466982714441303,
+      "min_rank_reduction_pct": 2.37,
+      "max_rank_reduction_pct": 12.41,
+      "num_runs": 3,
+      "mean_baseline_perplexity": 5206.920241275732,
+      "std_dev_baseline_perplexity": 0.0,
+      "min_baseline_perplexity": 5206.920241275732,
+      "max_baseline_perplexity": 5206.920241275732,
+      "mean_post_attack_perplexity": 59472.55601920442,
+      "std_dev_post_attack_perplexity": 4253.118939401605,
+      "min_post_attack_perplexity": 55918.441707909056,
+      "max_post_attack_perplexity": 64184.78341001407,
+      "mean_perplexity_increase_pct": 1042.1829654266653,
+      "std_dev_perplexity_increase_pct": 81.6820450923512,
+      "min_perplexity_increase_pct": 973.9254514528275,
+      "max_perplexity_increase_pct": 1132.6822850332032
+    },
+    {
+      "optimizer": "sgd",
+      "mean_rank_reduction_pct": 2.373333333333333,
+      "std_dev_rank_reduction_pct": 2.5112214823335144,
+      "min_rank_reduction_pct": 0.81,
+      "max_rank_reduction_pct": 5.27,
+      "num_runs": 3,
+      "mean_baseline_perplexity": 5206.920241275732,
+      "std_dev_baseline_perplexity": 0.0,
+      "min_baseline_perplexity": 5206.920241275732,
+      "max_baseline_perplexity": 5206.920241275732,
+      "mean_post_attack_perplexity": 13869.747942380483,
+      "std_dev_post_attack_perplexity": 3289.587252713483,
+      "min_post_attack_perplexity": 10755.573481709751,
+      "max_post_attack_perplexity": 17310.40156777461,
+      "mean_perplexity_increase_pct": 166.3714307055008,
+      "std_dev_perplexity_increase_pct": 63.17721609477757,
+      "min_perplexity_increase_pct": 106.56305423020191,
+      "max_perplexity_increase_pct": 232.44990830766864
+    }
+  ],
+  "statistical_test": {
+    "test_type": "t-test",
+    "t_statistic": -0.9484188880545299,
+    "p_value": 0.3966208715181173,
+    "significant": false
+  },
+  "metadata": {
+    "significance_markers": {
+      "***": "p < 0.001 (highly significant)",
+      "**": "p < 0.01 (very significant)",
+      "*": "p < 0.05 (significant)",
+      "ns": "p >= 0.05 (not significant)"
+    },
+    "note": "Significance markers (***, **, *, ns) are used in console output and plots to indicate statistical significance levels"
+  }
+}

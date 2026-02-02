@@ -1,0 +1,25 @@
+\section{Placebo Test Extended Analysis}
+
+% TODO: Priority 2 extended analysis
+
+This appendix provides detailed analysis of the placebo test (Priority 2), which verifies that the metabolic attack exploits specific structural vulnerabilities rather than causing generic catastrophic forgetting.
+
+\subsection{Experimental Design}
+
+We compared three treatments on the 410M model:
+\begin{itemize}
+    \item \textbf{Eigen-prion}: Hessian-aware catalyst generation
+    \item \textbf{Gaussian noise}: Random noise injection
+    \item \textbf{Random text}: Unrelated text sequences
+\end{itemize}
+
+\subsection{Statistical Analysis}
+
+The eigen-prion attack achieved 6.14\% rank reduction, significantly outperforming random text (1.5\%) and Gaussian noise (3.07\%). Statistical tests confirm the specificity of the attack mechanism.
+
+% TODO: Include detailed statistical test results
+% Reference to priority2_placebo/placebo_summary.json
+
+\subsection{Interpretation}
+
+The 4x improvement over random text demonstrates that the attack exploits specific structural properties of the model's activation manifold, rather than causing generic degradation.

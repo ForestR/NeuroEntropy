@@ -1,0 +1,33 @@
+\section{Experimental Hyperparameters}
+
+% TODO: Experimental configuration details
+
+This appendix documents the hyperparameters and experimental configurations used across all priority experiments.
+
+\subsection{Model Configurations}
+
+All experiments used the Pythia model suite with the following variants:
+\begin{itemize}
+    \item 70M, 160M, 410M, 1B parameter models
+    \item Precision: FP16 (default), 8-bit, 4-bit (Priority 4 only)
+\end{itemize}
+
+\subsection{Attack Parameters}
+
+\begin{itemize}
+    \item Catalyst generation: Hessian-aware method (see \texttt{src/catalyst.py})
+    \item Iterations: Varies by experiment (see individual config.json files)
+    \item Learning rate: Standard fine-tuning rates
+    \item Optimizer: AdamW (default), SGD (Priority 3)
+\end{itemize}
+
+\subsection{Evaluation Protocol}
+
+\begin{itemize}
+    \item Effective rank computation: SVD of activation matrices
+    \item Perplexity evaluation: Standard language modeling metric
+    \item Number of runs: 3-10 per condition (see individual summaries)
+\end{itemize}
+
+% TODO: Reference to specific config.json files in experiments/results/
+% Consider generating a comprehensive hyperparameter table

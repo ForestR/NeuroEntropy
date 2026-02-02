@@ -1,0 +1,34 @@
+\section{Discussion}
+
+% TODO: Implications for AI Safety (Big models are fragile) and Architecture 
+% (DeepSeek mHC, Quantization as defense)
+
+\subsection{Implications for AI Safety}
+
+Our results demonstrate that larger models are structurally more fragile, contradicting the common assumption that scale confers robustness. The inverse scaling law suggests that as we build larger models, we must invest proportionally more in understanding and defending against structural vulnerabilities.
+
+\subsection{Quantization as Defense}
+
+The discovery that quantization provides a natural defense mechanism has immediate practical implications. The 70x improvement from 8-bit quantization suggests that discrete representations disrupt the continuous gradient flow required for metabolic attacks. This aligns with thermodynamic principles: discretization increases entropy barriers.
+
+\subsection{Architectural Implications}
+
+Our findings point to several architectural directions:
+\begin{itemize}
+    \item \textbf{DeepSeek mHC}: The mixture-of-heads configuration may provide natural robustness through architectural diversity
+    \item \textbf{Quantization-Aware Training}: Models trained with quantization may develop inherent resistance
+    \item \textbf{Spectral Regularization}: Explicit regularization of effective rank during training
+\end{itemize}
+
+\subsection{Limitations and Future Work}
+
+Current experiments are limited to the Pythia suite. Future work should:
+\begin{enumerate}
+    \item Verify scaling law on larger models (70B+)
+    \item Test DeepSeek mHC architecture resistance
+    \item Explore other defense mechanisms
+    \item Investigate the relationship between training dynamics and vulnerability
+\end{enumerate}
+
+% TODO: Reference to roadmap observation about 1B collapse vs 160M expansion
+% The "Fibrosis" (scarring) analogy

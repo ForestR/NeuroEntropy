@@ -1,0 +1,64 @@
+\section{Results}
+
+% TODO: The 4 priority experiments with figure references
+% Emphasize "Fragility of Giants" narrative
+
+\subsection{The Inverse Scaling Law}
+
+Figure~\ref{fig:scaling_law} demonstrates our central finding: vulnerability to metabolic attacks increases dramatically with model size. While small models (70M-410M) show modest rank reduction (2.9\%-5.8\%), the 1B model suffers catastrophic collapse with 26.4\% rank reduction.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.8\textwidth]{figures/fig1_scaling_law.png}
+    \caption{Inverse scaling law: Rank reduction vs. model size. The 1B model (red point) shows catastrophic collapse, demonstrating the "Fragility of Giants" phenomenon.}
+    \label{fig:scaling_law}
+\end{figure}
+
+% Key narrative points:
+% - Small (70M): 2.9% Rank Reduction (Noise level)
+% - Medium (160M): 4.0% Rank Reduction
+% - Large (410M): 5.8% Rank Reduction
+% - Huge (1B): 26.4% Rank Reduction (Massive structural collapse)
+% - Perplexity explosion ($10^6$ range) confirms functional death
+
+\subsection{The Quantization Shield}
+
+Figure~\ref{fig:shield} reveals that quantization acts as a thermodynamic shield. While \fp models suffer 21.5\% collapse, \eightbit quantization reduces damage to 0.3\%---a 70x improvement.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.8\textwidth]{figures/fig2_shield_matrix.png}
+    \caption{Quantization shield effectiveness. 8-bit quantization provides near-complete immunity (0.3\% vs. 21.5\% for FP16), suggesting discrete quantization disrupts the metabolic attack mechanism.}
+    \label{fig:shield}
+\end{figure}
+
+% Key points:
+% - FP16 (Control): 21.5% Collapse
+% - 8-bit: 0.3% (Immunity) - 70x improvement
+% - 4-bit: 3.3% (High Resistance)
+% - Interpretation: Discrete quantization prevents prion replication
+
+\subsection{Attack Specificity}
+
+Figure~\ref{fig:placebo} confirms that the metabolic attack exploits specific structural vulnerabilities rather than causing generic catastrophic forgetting. The eigen-prion attack (6.14\%) is 4x more effective than random text (1.5\%).
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.7\textwidth]{figures/fig3_placebo_comparison.png}
+    \caption{Placebo test results. Eigen-prion attack significantly outperforms random text and Gaussian noise, demonstrating attack specificity.}
+    \label{fig:placebo}
+\end{figure}
+
+\subsection{Optimizer Mechanism}
+
+Figure~\ref{fig:mechanism} shows that \adam causes approximately 2.6x more damage than \sgd (6.14\% vs. 2.37\%), supporting our theoretical framework regarding metabolic amplification.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.7\textwidth]{figures/fig4_mechanism_comparison.png}
+    \caption{Mechanism test: Adam vs. SGD. Adam's second-moment estimation amplifies null space noise, leading to greater rank reduction.}
+    \label{fig:mechanism}
+\end{figure}
+
+% TODO: Include statistical test results in tables
+% Reference to tab1_scaling_summary.tex and tab2_statistical_tests.tex

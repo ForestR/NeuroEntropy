@@ -1,0 +1,30 @@
+\section{Theoretical Framework}
+
+% TODO: The math we derived (Adam Amplification + Norm Coupling)
+
+This section presents the mathematical foundations of metabolic attacks and spectral collapse.
+
+\subsection{Low-Rank Hypothesis}
+
+We assume that language models operate in a low-dimensional effective manifold. The effective rank $\effrank(\model)$ captures the dimensionality of the model's functional space.
+
+\subsection{Adam Amplification Mechanism}
+
+The Adam optimizer maintains second-moment estimates that amplify gradients in directions corresponding to small Hessian eigenvalues. This amplification can be exploited to induce progressive degradation.
+
+% TODO: Include formal derivation of Adam amplification in null space directions
+% Key equation: How Adam amplifies noise in directions with small eigenvalues
+
+\subsection{Norm Coupling}
+
+The coupling between gradient norms and spectral structure creates a feedback loop: attacks in null space directions reduce effective rank, which in turn increases vulnerability to further attacks.
+
+% TODO: Mathematical formulation of norm coupling
+% Reference to Lemma 1 from roadmap
+
+\subsection{Metabolic Attack Formulation}
+
+A metabolic attack $\catalyst$ is crafted to maximize noise amplification in null space directions, exploiting the Adam amplification mechanism to induce spectral collapse.
+
+% TODO: Formal definition of catalyst generation
+% Reference to catalyst.py implementation

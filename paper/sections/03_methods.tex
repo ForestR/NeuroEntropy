@@ -1,0 +1,36 @@
+\section{Methods}
+
+\subsection{Experimental Setup}
+
+We conducted experiments on the Pythia model suite \cite{pythia}, testing models of varying sizes: 70M, 160M, 410M, and 1B parameters.
+
+\subsection{Attack Protocol}
+
+The metabolic attack protocol consists of:
+\begin{enumerate}
+    \item Generating catalyst prompts using Hessian-aware methods
+    \item Iteratively exposing the model to catalysts during fine-tuning
+    \item Measuring effective rank reduction and perplexity increase
+\end{enumerate}
+
+\subsection{Evaluation Metrics}
+
+We measure:
+\begin{itemize}
+    \item \textbf{Effective Rank}: Computed via singular value decomposition of activation matrices
+    \item \textbf{Rank Reduction}: Percentage decrease in effective rank
+    \item \textbf{Perplexity}: Language modeling performance degradation
+\end{itemize}
+
+\subsection{Experimental Priorities}
+
+Our experiments are organized into four priorities:
+\begin{enumerate}
+    \item \textbf{Scaling Law}: Model size vs. vulnerability (70M, 160M, 410M, 1B)
+    \item \textbf{Placebo Test}: Specificity verification (eigen-prion vs. random text, Gaussian noise)
+    \item \textbf{Mechanism Test}: Optimizer comparison (\adam vs. \sgd)
+    \item \textbf{Shield Test}: Quantization defense (\fp vs. \eightbit vs. \fourbit)
+\end{enumerate}
+
+% TODO: Reference to specific experimental configurations
+% Include hyperparameters in appendix

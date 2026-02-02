@@ -1,0 +1,20 @@
+\section{Mechanism Test Extended Analysis}
+
+% TODO: Priority 3 extended analysis
+
+This appendix provides detailed analysis of the mechanism test (Priority 3), which compares Adam and SGD optimizers to verify the metabolic amplification hypothesis.
+
+\subsection{Experimental Design}
+
+We compared AdamW and SGD optimizers on the 410M model under identical attack conditions.
+
+\subsection{Results}
+
+AdamW achieved 6.14\% rank reduction compared to 2.37\% for SGD, representing a 2.6x difference. While statistical significance is limited by sample size (N=3), the effect size supports our theoretical framework.
+
+% TODO: Include detailed statistical test results
+% Reference to priority3_mechanism/mechanism_summary.json
+
+\subsection{Theoretical Interpretation}
+
+The difference aligns with our hypothesis that Adam's second-moment estimation amplifies noise in null space directions, creating a feedback loop that accelerates spectral collapse. SGD's simpler update rule lacks this amplification mechanism.

@@ -179,9 +179,3 @@ Special thanks to:
 - The open-source AI research community
 - Contributors running experiments on larger models
 - DeepSeek for developing mHC architecture (our first defense target)
-
----
-
-**Remember**: We are not just attacking models. We are discovering the physics of intelligence loss.
-
-**Let's push to main.** 🚀

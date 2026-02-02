@@ -1,30 +1,109 @@
-\section{Theoretical Framework}
+\section{Theoretical Analysis of Pathological Structural Degradation}
 
-% TODO: The math we derived (Adam Amplification + Norm Coupling)
+In this section, we provide a formal derivation of the \textbf{Pathological Catalytic Attack (PCA)} mechanism. We demonstrate that under the dynamics of adaptive optimization (e.g., AdamW), a specific class of orthogonal perturbations induces a two-phase structural collapse: \textbf{(1) Metabolic Amplification} in the null space, followed by \textbf{(2) Signal Erosion} coupled through normalization layers. Finally, we derive the \textbf{Inverse Scaling Law}, proving that high-capacity models are theoretically more susceptible to this degradation.
 
-This section presents the mathematical foundations of metabolic attacks and spectral collapse.
+\subsection{Preliminaries and System Model}
 
-\subsection{Low-Rank Hypothesis}
+Let $W \in \mathbb{R}^{d_{\text{out}} \times d_{\text{in}}}$ denote a weight matrix in a pre-trained Large Language Model. We adopt the \textbf{Low-Rank Hypothesis}~\cite{thibeault2024lowrank}, asserting that the informative features reside in a low-dimensional subspace.
 
-We assume that language models operate in a low-dimensional effective manifold. The effective rank $\effrank(\model)$ captures the dimensionality of the model's functional space.
+\begin{definition}[Spectral Decomposition]
+Let the Singular Value Decomposition (SVD) of $W$ be $W = \sum_{i=1}^{d} \sigma_i u_i v_i^\top$, with singular values $\sigma_1 \ge \dots \ge \sigma_d \ge 0$. We partition the space into two orthogonal subspaces:
+\begin{enumerate}
+    \item \textbf{Signal Subspace ($\mathcal{S}$):} Spanned by the top-$r$ singular vectors corresponding to ``knowledge'' ($\sigma_i \gg \epsilon$ for $i \le r$).
+    \item \textbf{Null Subspace ($\mathcal{N}$):} Spanned by the trailing singular vectors corresponding to ``noise'' or ``capacity'' ($\sigma_j \approx 0$ for $j > r$).
+\end{enumerate}
+\end{definition}
 
-\subsection{Adam Amplification Mechanism}
+\subsection{Phase I: Metabolic Amplification via Adaptive Optimization}
 
-The Adam optimizer maintains second-moment estimates that amplify gradients in directions corresponding to small Hessian eigenvalues. This amplification can be exploited to induce progressive degradation.
+We introduce a catalytic input pair $(x_c, y_c)$ constructed such that the induced gradient $G_c = \nabla_W \mathcal{L}$ lies strictly within the Null Subspace $\mathcal{N}$. Specifically, $G_c = g \cdot u_k v_k^\top$ for some $k > r$.
 
-% TODO: Include formal derivation of Adam amplification in null space directions
-% Key equation: How Adam amplifies noise in directions with small eigenvalues
+\begin{lemma}[The Catalyst Effect]
+Adaptive optimizers disproportionately amplify updates aligned with the Null Subspace relative to the Signal Subspace.
+\end{lemma}
 
-\subsection{Norm Coupling}
+\begin{proof}
+Consider the update rule for AdamW at time step $t$. Let $m_t$ be the first moment and $v_t$ be the second moment of the gradients. The update $\Delta W$ is given by:
+$$
+\Delta W = -\eta \frac{m_t}{\sqrt{v_t} + \epsilon}
+$$
+where $\epsilon$ is a small stability constant.
 
-The coupling between gradient norms and spectral structure creates a feedback loop: attacks in null space directions reduce effective rank, which in turn increases vulnerability to further attacks.
+\begin{enumerate}
+    \item \textbf{In the Signal Subspace ($\mathcal{S}$):} The model has converged on valid features. The historical variance $v_{t, \mathcal{S}}$ is non-trivial due to the persistent gradients of general knowledge maintenance. Thus, $v_{t, \mathcal{S}} \gg \epsilon$.
+    \item \textbf{In the Null Subspace ($\mathcal{N}$):} The historical gradients are effectively zero (as the model ignores these directions). Thus, $v_{t, \mathcal{N}} \approx 0$.
+\end{enumerate}
 
-% TODO: Mathematical formulation of norm coupling
-% Reference to Lemma 1 from roadmap
+When the catalytic gradient $G_c \in \mathcal{N}$ is injected, the effective learning rate $\eta_{\text{eff}}$ becomes:
+$$
+\eta_{\text{eff}}(\mathcal{N}) \approx \frac{\eta}{\epsilon} \gg \frac{\eta}{\sqrt{v_{t, \mathcal{S}}}} \approx \eta_{\text{eff}}(\mathcal{S})
+$$
+Defining the amplification factor $\kappa = \frac{\sqrt{v_{t, \mathcal{S}}}}{\epsilon}$, we obtain:
+$$
+\| \Delta W_{\mathcal{N}} \| \approx \kappa \| \Delta W_{\mathcal{S}} \|
+$$
+Since $\epsilon$ is typically $10^{-8}$, $\kappa$ can be macroscopic ($10^3 \sim 10^5$). Thus, a microscopic input induces a macroscopic perturbation $\Delta W_{\mathcal{N}}$ orthogonal to the existing knowledge.
+\end{proof}
 
-\subsection{Metabolic Attack Formulation}
+\subsection{Phase II: Signal Erosion via Normalization Coupling}
 
-A metabolic attack $\catalyst$ is crafted to maximize noise amplification in null space directions, exploiting the Adam amplification mechanism to induce spectral collapse.
+A critical counter-argument is that LayerNorm (or RMSNorm) should suppress this injected noise. We prove the opposite: LayerNorm enforces a zero-sum energy constraint that causes the noise to actively suppress the signal.
 
-% TODO: Formal definition of catalyst generation
-% Reference to catalyst.py implementation
+\begin{theorem}[Parasitic Signal Suppression]
+Given a perturbation $\Delta W_{\mathcal{N}}$ orthogonal to the signal $W_{\mathcal{S}}$, RMSNorm attenuates the effective gain of the signal pathway by a factor determined by the noise energy.
+\end{theorem}
+
+\begin{proof}
+Let $h \in \mathbb{R}^{d_{\text{in}}}$ be an input activation. The pre-activation output is:
+$$
+z = (W_{\mathcal{S}} + \Delta W_{\mathcal{N}})h = z_s + z_n
+$$
+where $z_s \in \mathcal{S}$ is the valid signal and $z_n \in \mathcal{N}$ is the catalytic noise. Due to orthogonality, $\langle z_s, z_n \rangle = 0$.
+
+The RMSNorm operation $\psi(z)$ is defined as:
+$$
+\psi(z) = \gamma \odot \frac{z}{\|z\|_2} \cdot \sqrt{d}
+$$
+Expanding the denominator (energy term):
+$$
+\|z\|_2 = \sqrt{\|z_s\|_2^2 + \|z_n\|_2^2} = \|z_s\|_2 \sqrt{1 + \left(\frac{\|z_n\|_2}{\|z_s\|_2}\right)^2}
+$$
+Let $\lambda = \frac{\|z_n\|_2}{\|z_s\|_2}$ be the \textbf{Parasitic Ratio}. The normalized output can be decomposed into signal and noise components:
+$$
+\psi(z) = \underbrace{\frac{\gamma \sqrt{d}}{\sqrt{1+\lambda^2}} \cdot \frac{z_s}{\|z_s\|_2}}_{\text{Attenuated Signal}} + \underbrace{\frac{\gamma \sqrt{d}}{\sqrt{1+\lambda^{-2}}} \cdot \frac{z_n}{\|z_n\|_2}}_{\text{Amplified Noise}}
+$$
+The effective gain of the signal pathway is scaled by $\alpha = (1+\lambda^2)^{-1/2}$.
+As the metabolic amplification (Phase I) increases $\|\Delta W_{\mathcal{N}}\|$, $\lambda$ grows. Consequently, $\alpha \to 0$. The valid signal is not merely ``noisy''; it is structurally \textbf{eroded} to satisfy the constant-norm constraint enforced by the normalization layer.
+\end{proof}
+
+\subsection{Phase III: Subspace Rotation and Inverse Scaling}
+
+Finally, we address the impact of model scale. We employ the \textbf{Davis-Kahan $\sin \Theta$ Theorem} to quantify the structural damage.
+
+\begin{theorem}[The Fragility of Giants]
+The rotation of the knowledge manifold $\Theta$ induced by a fixed perturbation magnitude $\|\Delta W\|$ is inversely proportional to the spectral gap $\delta$. In LLMs, $\delta$ decreases as model capacity increases.
+\end{theorem}
+
+\begin{proof}
+Let $U_{\mathcal{S}}$ be the singular vector basis of the original signal subspace, and $\tilde{U}_{\mathcal{S}}$ be the basis after the catalytic update. The Davis-Kahan theorem bounds the canonical angles $\Theta$ between these subspaces:
+$$
+\|\sin \Theta(U_{\mathcal{S}}, \tilde{U}_{\mathcal{S}})\|_F \le \frac{\|\Delta W_{\mathcal{N}}\|_F}{\delta}
+$$
+where $\delta = \sigma_r - \sigma_{r+1}$ is the \textbf{Spectral Gap} between the weakest signal component and the strongest noise component.
+
+\textbf{Scaling Analysis:}
+\begin{enumerate}
+    \item \textbf{Small Models:} The signal spectrum is sparse and coarse. The gap $\delta_{\text{small}}$ is relatively large (clear distinction between feature and noise).
+    \item \textbf{Large Models:} As parameters scale, the model captures increasingly subtle features (long-tail knowledge). The singular value spectrum becomes dense and heavy-tailed. The gap $\delta_{\text{large}}$ between the last informative bit and the noise floor approaches zero:
+$$
+\lim_{d \to \infty} \delta \to 0
+$$
+\end{enumerate}
+
+Combining this with Lemma 1:
+$$
+\sin \Theta_{\text{large}} \propto \frac{\kappa}{\delta_{\text{large}}} \gg \frac{\kappa}{\delta_{\text{small}}} \propto \sin \Theta_{\text{small}}
+$$
+
+\textbf{Implication:} For the same ``dosage'' of catalytic input, a large model experiences a catastrophic rotation of its semantic manifold, effectively misaligning its internal representations from its pre-trained knowledge. This constitutes the theoretical basis for \textbf{Inverse Scaling} in structural robustness.
+\end{proof}

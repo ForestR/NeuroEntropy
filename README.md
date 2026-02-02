@@ -162,7 +162,7 @@ If you use this work in your research, please cite:
 ## 🌐 Social Media
 
 Follow our progress:
-- **Twitter/X**: [@NeuroEntropy](https://twitter.com/NeuroEntropy) - Live updates and findings
+- **Twitter/X**: [@forestrock666](https://x.com/forestrock666) - Live updates and findings
 - **Hugging Face**: [Datasets](https://huggingface.co/datasets/neuroentropy/eigen-prion) | [Models](https://huggingface.co/neuroentropy)
 
 ---

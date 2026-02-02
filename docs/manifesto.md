@@ -39,6 +39,43 @@ We envision a future where:
 - Defenses are developed alongside attacks
 - The AI research community collaborates openly on safety-critical research
 
+### Current Status
+
+**Important Note**: The hypothesis that "mHC's manifold constraint can defend against erosion" remains unconfirmed at the experimental level. This is a key area for future investigation.
+
+#### What We Have Completed
+
+1. **Theoretical Foundation**
+   - Derivation and proof of the theoretical framework
+   - Analysis of the mechanism behind metabolic attacks
+
+2. **Scaling Law Experiments**
+   - Tested on Pythia models: `['70m', '160m', '410m', '1b']`
+   - Configuration: `--force-fft --quantization fp16 --control-type eigen_prion`
+   - Demonstrated that larger models are more vulnerable to spectral collapse
+
+3. **Placebo Test**
+   - Tested on Pythia 410M with `--force-fft --quantization fp16`
+   - Control types: `['gaussian_noise', 'random_text', 'eigen_prion']`
+   - Validated that the attack effect is specific to eigen_prion
+
+4. **Mechanism Test**
+   - Tested on Pythia 410M with `--force-fft --quantization fp16`
+   - Optimizers: `['adamw', 'sgd']`
+   - Confirmed the role of Adam's second-moment estimate in amplifying noise
+
+5. **Shield Test**
+   - Tested on Pythia 1B
+   - Quantization levels: `['fp16', '8bit', '4bit']`
+   - Explored quantization as a potential defense mechanism
+
+#### What's Next / TODO
+
+- **Experimental Validation of mHC Defense Hypothesis**: Test whether architectures with manifold constraints (like DeepSeek's mHC) can resist metabolic attacks
+- **Extended Scaling Studies**: Verify predictions on larger models (beyond 1B parameters)
+- **Defense Development**: Explore and develop effective countermeasures
+- **Community Verification**: Invite collaborators to reproduce and extend findings
+
 ### Join Us
 
 This is not just code. This is **live science**. Every experiment, every visualization, every finding is documented here in real-time.

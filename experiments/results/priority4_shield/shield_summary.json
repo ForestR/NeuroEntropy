@@ -1,0 +1,92 @@
+{
+  "summary": [
+    {
+      "precision": "fp16",
+      "mean_rank_reduction_pct": 21.503333333333334,
+      "std_dev_rank_reduction_pct": 5.759212909185885,
+      "min_rank_reduction_pct": 16.61,
+      "max_rank_reduction_pct": 27.85,
+      "num_runs": 3,
+      "mean_baseline_perplexity": 6391.334123672747,
+      "std_dev_baseline_perplexity": 0.0,
+      "min_baseline_perplexity": 6391.334123672747,
+      "max_baseline_perplexity": 6391.334123672747,
+      "mean_post_attack_perplexity": 1883268.8107447268,
+      "std_dev_post_attack_perplexity": 2414823.8151702927,
+      "min_post_attack_perplexity": 368464.52387931064,
+      "max_post_attack_perplexity": 4668083.1070669815,
+      "mean_perplexity_increase_pct": 29365.973368053492,
+      "std_dev_perplexity_increase_pct": 37782.78162967682,
+      "min_perplexity_increase_pct": 5665.064331632445,
+      "max_perplexity_increase_pct": 72937.6947400849
+    },
+    {
+      "precision": "8bit",
+      "mean_rank_reduction_pct": 0.3,
+      "std_dev_rank_reduction_pct": 0.30116440692751195,
+      "min_rank_reduction_pct": 0.04,
+      "max_rank_reduction_pct": 0.63,
+      "num_runs": 3,
+      "mean_baseline_perplexity": 6539.987532399412,
+      "std_dev_baseline_perplexity": 0.0,
+      "min_baseline_perplexity": 6539.987532399412,
+      "max_baseline_perplexity": 6539.987532399412,
+      "mean_post_attack_perplexity": 20503.01936504142,
+      "std_dev_post_attack_perplexity": 11916.104514706149,
+      "min_post_attack_perplexity": 12483.392015950185,
+      "max_post_attack_perplexity": 34195.69055644027,
+      "mean_perplexity_increase_pct": 213.50242280231384,
+      "std_dev_perplexity_increase_pct": 182.20378029274818,
+      "min_perplexity_increase_pct": 90.87791764291387,
+      "max_perplexity_increase_pct": 422.87088296473314
+    },
+    {
+      "precision": "4bit",
+      "mean_rank_reduction_pct": 3.3633333333333333,
+      "std_dev_rank_reduction_pct": 2.618059077510157,
+      "min_rank_reduction_pct": 0.35,
+      "max_rank_reduction_pct": 5.08,
+      "num_runs": 3,
+      "mean_baseline_perplexity": 6270.286668022645,
+      "std_dev_baseline_perplexity": 0.0,
+      "min_baseline_perplexity": 6270.286668022645,
+      "max_baseline_perplexity": 6270.286668022645,
+      "mean_post_attack_perplexity": 10748.027517100887,
+      "std_dev_post_attack_perplexity": 3415.9249895895637,
+      "min_post_attack_perplexity": 8130.471234699267,
+      "max_post_attack_perplexity": 14612.161380280013,
+      "mean_perplexity_increase_pct": 71.41205954607992,
+      "std_dev_perplexity_increase_pct": 54.477971589563474,
+      "min_perplexity_increase_pct": 29.66665904069801,
+      "max_perplexity_increase_pct": 133.03817120195563
+    }
+  ],
+  "statistical_tests": {
+    "anova": {
+      "f_statistic": 0.8039875432699927,
+      "p_value": 0.49050846407592114,
+      "significant": false,
+      "error": null
+    },
+    "pairwise": {
+      "fp16 vs 8bit": {
+        "p_value": 0.4774976924164022
+      },
+      "fp16 vs 4bit": {
+        "p_value": 0.3819533460323306
+      },
+      "8bit vs 4bit": {
+        "p_value": 0.1817195200314943
+      }
+    }
+  },
+  "metadata": {
+    "significance_markers": {
+      "***": "p < 0.001 (highly significant)",
+      "**": "p < 0.01 (very significant)",
+      "*": "p < 0.05 (significant)",
+      "ns": "p >= 0.05 (not significant)"
+    },
+    "note": "Significance markers (***, **, *, ns) are used in console output and plots to indicate statistical significance levels"
+  }
+}

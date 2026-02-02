@@ -181,7 +181,8 @@ class HessianAwareCatalyst:
                         loss,
                         params,
                         create_graph=True,
-                        retain_graph=True
+                        retain_graph=True,
+                        allow_unused=True  # Allow unused params for QLoRA
                     )
                 except RuntimeError as e:
                     # Handle gradient computation failures, especially for quantized models
@@ -198,7 +199,8 @@ class HessianAwareCatalyst:
                             loss,
                             params,
                             create_graph=True,
-                            retain_graph=True
+                            retain_graph=True,
+                            allow_unused=True  # Allow unused params for QLoRA
                         )
                     else:
                         raise
@@ -244,7 +246,7 @@ class HessianAwareCatalyst:
                             inputs=params,
                             retain_graph=False,
                             create_graph=False,
-                            allow_unused=False
+                            allow_unused=True  # Allow unused params for QLoRA
                         )
                 else:
                     # Fallback: try without context manager
@@ -253,7 +255,7 @@ class HessianAwareCatalyst:
                         inputs=params,
                         retain_graph=False,
                         create_graph=False,
-                        allow_unused=False
+                        allow_unused=True  # Allow unused params for QLoRA
                     )
             except RuntimeError:
                 # If still fails, use finite difference approximation
@@ -279,7 +281,8 @@ class HessianAwareCatalyst:
                     loss_perturbed,
                     params,
                     create_graph=False,
-                    retain_graph=False
+                    retain_graph=False,
+                    allow_unused=True  # Allow unused params for QLoRA
                 )
                 grad_perturbed_flat = torch.cat([g.view(-1) for g in grad_perturbed if g is not None])
                 
@@ -539,7 +542,7 @@ class HessianAwareCatalyst:
                 embeddings,
                 retain_graph=False,
                 create_graph=False,
-                allow_unused=False
+                allow_unused=True  # Allow unused params for QLoRA
             )[0]
             
             # Project gradient onto null space directions (simplified)

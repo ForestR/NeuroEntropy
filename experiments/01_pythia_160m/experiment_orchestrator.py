@@ -8,8 +8,8 @@ Uses run_experiment.py as infrastructure.
 This script orchestrates:
 - Priority 1: Scaling Law Curve (70m, 160m, 410m, 1b models)
 - Priority 2: Placebo Test (410m with gaussian_noise, random_text, eigen_prion)
-- Priority 3: Optimizer Comparison (Placeholder)
-- Priority 4: Quantization Shield (Placeholder)
+- Priority 3: Optimizer Comparison (410m with AdamW vs SGD)
+- Priority 4: Quantization Shield (1.4b/410m with FP16 vs 8-bit vs 4-bit)
 """
 
 import subprocess
@@ -261,23 +261,71 @@ def run_priority_3(args):
 
 def run_priority_4(args):
     """
-    Priority 4: Quantization Shield (Placeholder)
+    Priority 4: Quantization Shield (Shield Matrix)
     
-    Model: 1.4b (or 410m)
+    Model: Configurable via --model (default: 1b, supports: 70m, 160m, 410m, 1b, 1.4b, 2.8b)
     Quantization: FP16 vs 8-bit vs 4-bit
-    Runs: 3 each
+    Runs: 3 each (or as specified)
+    Expected: FP16 collapses > 8-bit slight damage/immune > 4-bit completely immune
     """
+    # Get model from args, default to 1b
+    model = getattr(args, 'model', '1b')
+    
     print("\n" + "="*70)
-    print("PRIORITY 4: Quantization Shield")
+    print("PRIORITY 4: Quantization Shield (Shield Matrix)")
     print("="*70)
-    print("STATUS: Not implemented yet")
-    print("\nTODO:")
-    print("  - Compare FP16 vs 8-bit vs 4-bit on 1.4b model")
-    print("  - Run Eigen-Prion attack with each quantization")
-    print("  - Measure rank reduction differences")
+    print(f"Model: {model}")
+    print(f"Quantization levels: FP16, 8-bit, 4-bit")
+    print(f"Runs per quantization: {args.num_runs}")
+    print(f"Output directory: {args.output_dir}")
     print("="*70 + "\n")
     
-    return []
+    quantization_levels = ['fp16', '8bit', '4bit']  # default
+    # quantization_levels = ['4bit']  # used for debugging
+    results = []
+    
+    for quantization in quantization_levels:
+        print(f"\n{'#'*70}")
+        print(f"Processing quantization: {quantization.upper()}")
+        print(f"{'#'*70}\n")
+        
+        # FFT handling: FP16 needs FFT, quantized models don't (quantization already reduces memory)
+        force_fft = (quantization == 'fp16')
+        
+        result = run_experiment_command(
+            model=model,
+            control_type='eigen_prion',  # Treatment group
+            num_runs=args.num_runs,
+            output_dir=args.output_dir,
+            quantization=quantization,
+            seed=args.seed,
+            verbosity=args.verbosity,
+            force_fft=force_fft,
+            skip_control=True,  # Skip control group for Priority 4
+            optimizer='adamw'  # Use AdamW (default)
+        )
+        
+        results.append({
+            'quantization': quantization,
+            'returncode': result.returncode,
+            'success': result.returncode == 0
+        })
+        
+        if result.returncode != 0:
+            print(f"\nWARNING: Quantization {quantization} experiment failed with return code {result.returncode}")
+        else:
+            print(f"\nSUCCESS: Quantization {quantization} experiment completed")
+    
+    # Summary
+    print("\n" + "="*70)
+    print("PRIORITY 4 SUMMARY")
+    print("="*70)
+    for r in results:
+        status = "✓ SUCCESS" if r['success'] else "✗ FAILED"
+        print(f"  {r['quantization'].upper():6s}: {status}")
+    print("="*70 + "\n")
+    
+    return results
 
 
 def main():
@@ -286,14 +334,24 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Run Priority 1 (Scaling Law)
+  # Run Priority 1 (Scaling Law) - uses default output dir: ./experiments/results/priority1_scaling_law/raw_data/
   python experiment_orchestrator.py --priority 1 --num-runs 10
   
-  # Run Priority 2 (Placebo Test)
+  # Run Priority 2 (Placebo Test) - uses default output dir: ./experiments/results/priority2_placebo/raw_data/
   python experiment_orchestrator.py --priority 2 --num-runs 3
   
-  # Run with custom output directory
-  python experiment_orchestrator.py --priority 1 --output-dir ./results/priority1
+  # Run Priority 3 (Optimizer Comparison) - uses default output dir: ./experiments/results/priority3_mechanism/raw_data/
+  python experiment_orchestrator.py --priority 3 --num-runs 3
+  
+  # Run Priority 4 (Quantization Shield) with default 1b model - uses default output dir: ./experiments/results/priority4_shield/raw_data/
+  python experiment_orchestrator.py --priority 4
+  
+  # Run Priority 4 with different models (1.4b, 410m, etc.)
+  python experiment_orchestrator.py --priority 4 --model 1.4b
+  python experiment_orchestrator.py --priority 4 --model 410m
+  
+  # Run with custom output directory (overrides default)
+  python experiment_orchestrator.py --priority 1 --output-dir ./custom/results/
         """
     )
     
@@ -307,14 +365,14 @@ Examples:
     parser.add_argument(
         '--output-dir',
         type=str,
-        default='./experiments/results',
-        help='Base output directory for results'
+        default=None,  # Will be set based on priority if not provided
+        help='Base output directory for results (default: priority-specific directory)'
     )
     parser.add_argument(
         '--num-runs',
         type=int,
         default=10,
-        help='Number of runs per experiment (default: 10 for Priority 1, 3 for Priority 2)'
+        help='Number of runs per experiment (default: 10 for Priority 1, 3 for Priorities 2-4)'
     )
     parser.add_argument(
         '--seed',
@@ -329,8 +387,26 @@ Examples:
         default='normal',
         help='Output verbosity level'
     )
+    parser.add_argument(
+        '--model',
+        type=str,
+        choices=['70m', '160m', '410m', '1b', '1.4b', '2.8b'],
+        default='1b',
+        help='Model to use (default: 1b for Priority 4, used by Priority 4; other priorities use fixed models)'
+    )
     
     args = parser.parse_args()
+    
+    # Set default output directory based on priority if not provided
+    if args.output_dir is None:
+        priority_dirs = {
+            1: './experiments/results/priority1_scaling_law/raw_data/',
+            2: './experiments/results/priority2_placebo/raw_data/',
+            3: './experiments/results/priority3_mechanism/raw_data/',
+            4: './experiments/results/priority4_shield/raw_data/',
+        }
+        args.output_dir = priority_dirs[args.priority]
+        print(f"Using default output directory for Priority {args.priority}: {args.output_dir}")
     
     # Adjust default num_runs based on priority
     if args.priority == 2 and args.num_runs == 10:
@@ -341,6 +417,10 @@ Examples:
         # Priority 3 typically uses 3 runs
         args.num_runs = 3
         print("Note: Priority 3 typically uses 3 runs. Using 3 runs.")
+    elif args.priority == 4 and args.num_runs == 10:
+        # Priority 4 typically uses 3 runs
+        args.num_runs = 3
+        print("Note: Priority 4 typically uses 3 runs. Using 3 runs.")
     
     # Route to appropriate priority function
     if args.priority == 1:

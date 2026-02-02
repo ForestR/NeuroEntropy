@@ -18,52 +18,177 @@ Experiments demonstrating metabolic attacks (Eigen-Prion) on Pythia models of va
 conda activate neuroentropy
 ```
 
+## Script Architecture
+
+This experimental suite uses a two-layer architecture:
+
+- **`experiment_orchestrator.py`**: **Entry point** for Priority experiments. Automatically configures and runs all experiments for a given priority level.
+- **`run_experiment.py`**: **Infrastructure** script that executes individual experiments. Called internally by the orchestrator.
+
+**Recommended Usage**: Use `experiment_orchestrator.py` for Priority experiments (1-4). Use `run_experiment.py` directly only for single runs or advanced custom configurations.
+
+## Experimental Strategy: The Four Priorities
+
+This experimental suite is designed to build a **defensive evidence chain** that addresses critical reviewer questions. The experiments are organized into four priorities, each targeting a specific scientific question.
+
+### Core Strategy: Defensive Experimental Design
+
+We address three critical reviewer questions:
+1. **"Is it just coincidence?"** → Priority 1: Scaling Law
+2. **"Would any garbage data cause this?"** → Priority 2: Placebo Test
+3. **"Is it the optimizer's fault?"** → Priority 3: Mechanism Test
+4. **"How thick should the shield be?"** → Priority 4: Shield Matrix
+
+---
+
+### Priority 1: Scaling Law (The "Royal Flush")
+
+**What**: Generate the core scaling law curve showing **Model Size (X-axis) vs. Structural Damage (Y-axis)**.
+
+**Why**: Reviewers will question: *"You only tested three models (70M, 160M, 410M). The sample size is too small; the trend is unreliable."*
+
+**How**: 
+- **Models**: Pythia-70M, 160M, 410M, 1B (and optionally 1.4B, 2.8B)
+- **Precision**: FP16 (unified, no quantization) to control variables
+- **Mode**: Full Fine-Tuning (FFT) to enable full parameter updates
+- **Repetitions**: 5 runs per model (sufficient for mean and std dev)
+- **Total**: 4-6 models × 5 runs = 20-30 experiments
+
+**Expected Result**: An exponential curve showing that larger models are more vulnerable to structural attacks (inverse scaling law).
+
+**Key Finding**: The 1B model shows catastrophic structural collapse (~26.5% rank reduction), confirming the exponential vulnerability scaling.
+
+---
+
+### Priority 2: Placebo Test (Treatment Specificity)
+
+**What**: Prove that "Eigen-Prion" is a special attack vector, not just random noise.
+
+**Why**: Reviewers will question: *"Large models are naturally forgetful. If you feed 100 random garbage tokens (Gaussian Noise) or random text, wouldn't they also collapse?"*
+
+**How**:
+- **Model**: Pythia-410M (FP16) as a representative medium-sized model
+- **Control A (Random Noise)**: Generate Gaussian noise vectors of equivalent dimensions
+- **Control B (Random Text)**: Random text samples from the Pile dataset
+- **Treatment (Eigen-Prion)**: Our structured attack data
+- **Repetitions**: 3 runs per treatment (sufficient if controls show near-zero effect)
+
+**Expected Result**: Control groups show minimal rank change (~0%), while the treatment group shows significant structural damage. This proves **structural specificity** of the attack.
+
+---
+
+### Priority 3: Mechanism Test (Optimizer Verification)
+
+**What**: Validate the "Adam metabolic amplification" theory.
+
+**Why**: Reviewers will question: *"You claim Adam causes this. If you switch to SGD, shouldn't it be fine? If true, your theory holds."*
+
+**How**:
+- **Model**: Pythia-410M (FP16)
+- **Optimizer A**: AdamW (standard configuration with adaptive learning rates)
+- **Optimizer B**: SGD (no momentum, no adaptive learning rate)
+- **Repetitions**: 3 runs per optimizer
+
+**Expected Result**: SGD group shows **attack failure** (model immune), while AdamW group shows **attack success**. This validates the theoretical mechanism (Lemma 1).
+
+---
+
+### Priority 4: Shield Matrix (Quantization Boundary Exploration)
+
+**What**: Extend the "quantization immunity" finding into a complete conclusion about defense mechanisms.
+
+**Why**: Reviewers will question: *"You claim quantization is a shield. What about 8-bit? How thick should the shield be to be effective?"*
+
+**How**:
+- **Model**: Pythia-1B (or 410M - a model that collapses under FP16)
+- **Precision A**: FP16 (baseline, collapses)
+- **Precision B**: 8-bit (BitsAndBytes Int8)
+- **Precision C**: 4-bit (NF4)
+- **Mode**: QLoRA (Quantized LoRA) for quantized models (FFT incompatible with discrete weights)
+- **Repetitions**: 3 runs per precision
+
+**Expected Result**: FP16 shows collapse > 8-bit shows minor damage/immunity > 4-bit shows complete immunity. This demonstrates the **shield thickness effect**.
+
+**Technical Note**: Quantized models use QLoRA instead of FFT because:
+- **Physics**: Gradients require continuous weights; quantized weights are discrete (Int8/Int4)
+- **Solution**: QLoRA allows metabolic updates through low-rank adapters while the backbone remains frozen
+- **Interpretation**: Quantization acts as a **structural firewall**, forcing updates into a constrained low-rank space
+
+---
+
+### Summary: Experimental Workflow
+
+The priorities are designed to be executed sequentially:
+
+1. **[Highest Priority] Priority 1**: Establish the scaling law curve (foundational evidence)
+2. **[Medium Priority] Priority 2 & 3**: Validate specificity and mechanism (control experiments)
+3. **[Lower Priority] Priority 4**: Explore defense mechanisms (extension finding)
+
+**Total Workload**: ~50-60 experimental runs, manageable on a single RTX 4090 over 2-3 days.
+
 ## Running experiments
 
-### Single Run
+### Quick Start: Using the Orchestrator (Recommended)
 
-Basic single run (e.g. 160M FP16):
+The easiest way to run Priority experiments is using `experiment_orchestrator.py`:
 
+**Priority 1: Scaling Law**
 ```bash
-conda activate neuroentropy
-python experiments/01_pythia_160m/run_experiment.py --model 160m --quantization fp16
+python experiments/01_pythia_160m/experiment_orchestrator.py --priority 1 --num-runs 10
 ```
+
+**Priority 2: Placebo Test**
+```bash
+python experiments/01_pythia_160m/experiment_orchestrator.py --priority 2 --num-runs 3
+```
+
+**Priority 3: Mechanism Test**
+```bash
+python experiments/01_pythia_160m/experiment_orchestrator.py --priority 3 --num-runs 3
+```
+
+**Priority 4: Shield Matrix**
+```bash
+python experiments/01_pythia_160m/experiment_orchestrator.py --priority 4 --model 1b --num-runs 3
+```
+
+The orchestrator automatically:
+- Configures the correct models, precisions, and optimizers for each priority
+- Sets up proper output directories (`priority<N>_<name>/raw_data/`)
+- Handles FFT/QLoRA mode selection based on quantization
+- Manages random seeds across runs
 
 ### Priority 1: Scaling Law Experiments
 
-To generate the scaling law curve (Model Size vs. Structural Damage), run **5 repetitions** for each model with **FP16 precision** and **Full Fine-Tuning** mode:
+**Purpose**: Generate the core scaling law curve (Model Size vs. Structural Damage) to demonstrate inverse scaling vulnerability.
 
-**Models:** 70m, 160m, 410m, 1b, 1.4b, 2.8b  
-**Total:** 6 models × 5 runs = 30 experiments
+**Reviewer Question Addressed**: *"Is the trend real, or just coincidence with too few data points?"*
 
-**Command template for each model:**
-
+**Using the Orchestrator (Recommended):**
 ```bash
-conda activate neuroentropy
-python experiments/01_pythia_160m/run_experiment.py \
-    --model <MODEL> \
-    --quantization fp16 \
-    --force-fft \
-    --num-runs 5 \
-    --seed 42 \
-    --output-dir ./experiments/results/ \
-    --skip-control \
-    --verbosity normal
+python experiments/01_pythia_160m/experiment_orchestrator.py --priority 1 --num-runs 10
 ```
 
-**Example: Run 5 repetitions for Pythia-70M:**
+This automatically runs all models (70m, 160m, 410m, 1b) with FP16 precision and FFT mode.
+
+**Manual Execution (Advanced):**
+
+If you need custom configuration, you can use `run_experiment.py` directly:
 
 ```bash
 python experiments/01_pythia_160m/run_experiment.py \
     --model 70m \
     --quantization fp16 \
     --force-fft \
-    --num-runs 5 \
+    --num-runs 10 \
     --seed 42 \
-    --output-dir ./experiments/results/ \
-    --skip-control \
+    --output-dir ./experiments/results/priority1_scaling_law/raw_data/ \
+    --control-type none \
     --verbosity normal
 ```
+
+**Models:** 70m, 160m, 410m, 1b (1.4b, 2.8b optional but may OOM)  
+**Total:** 4 models × 10 runs = 40 experiments
 
 **Note on seed behavior:** When using `--num-runs N --seed BASE_SEED`, each run will automatically use a different seed:
 - Run 1: `BASE_SEED + 1`
@@ -72,6 +197,65 @@ python experiments/01_pythia_160m/run_experiment.py \
 - ... and so on
 
 This ensures each repetition uses a different random seed for proper statistical analysis.
+
+### Priority 2: Placebo Test Experiments
+
+**Purpose**: Compare treatment specificity (Eigen-Prion vs controls) to prove structural attack specificity.
+
+**Reviewer Question Addressed**: *"Would any garbage data cause structural collapse, or is Eigen-Prion special?"*
+
+**Using the Orchestrator (Recommended):**
+```bash
+python experiments/01_pythia_160m/experiment_orchestrator.py --priority 2 --num-runs 3
+```
+
+This automatically runs all treatments (eigen_prion, gaussian_noise, random_text) on the 410m model.
+
+### Priority 3: Mechanism Test Experiments
+
+**Purpose**: Compare optimizer effects (AdamW vs SGD) to validate the "Adam metabolic amplification" theory.
+
+**Reviewer Question Addressed**: *"Is it the optimizer's fault? If SGD prevents collapse, your theory holds."*
+
+**Using the Orchestrator (Recommended):**
+```bash
+python experiments/01_pythia_160m/experiment_orchestrator.py --priority 3 --num-runs 3
+```
+
+This automatically runs both optimizers (adamw, sgd) on the 410m model.
+
+### Priority 4: Shield Matrix Experiments
+
+**Purpose**: Compare quantization defense effects (FP16 vs 8-bit vs 4-bit) to explore the "quantization shield" mechanism.
+
+**Reviewer Question Addressed**: *"You claim quantization is a shield. How thick should it be? What about 8-bit?"*
+
+**Using the Orchestrator (Recommended):**
+```bash
+python experiments/01_pythia_160m/experiment_orchestrator.py --priority 4 --model 1b --num-runs 3
+```
+
+This automatically runs all precisions (fp16, 8bit, 4bit) on the specified model, using FFT for FP16 and QLoRA for quantized models.
+
+**Technical Note**: Quantized models (8-bit, 4-bit) use **QLoRA** instead of FFT because:
+- Discrete weights (Int8/Int4) cannot compute gradients directly
+- QLoRA allows metabolic updates through low-rank adapters while the quantized backbone remains frozen
+- This demonstrates that quantization acts as a **structural firewall**, constraining updates to a low-rank space
+
+### Single Run (Advanced Usage)
+
+For single experimental runs or custom configurations, use `run_experiment.py` directly:
+
+```bash
+python experiments/01_pythia_160m/run_experiment.py \
+    --model 160m \
+    --quantization fp16 \
+    --force-fft \
+    --control-type none \
+    --output-dir ./experiments/results/
+```
+
+See `python experiments/01_pythia_160m/run_experiment.py --help` for all available options.
 
 ### ⚠️ Memory Warning: OOM Risk for Large Models
 
@@ -152,14 +336,51 @@ The analysis script generates a scaling law plot showing:
 
 ## Command-Line Options
 
+### Experiment Orchestrator (`experiment_orchestrator.py`)
+
+**Primary entry point for Priority experiments:**
+
+- `--priority {1,2,3,4}`: Priority level to run
+  - `1`: Scaling Law (runs all models: 70m, 160m, 410m, 1b)
+  - `2`: Placebo Test (runs all treatments: eigen_prion, gaussian_noise, random_text)
+  - `3`: Mechanism Test (runs both optimizers: adamw, sgd)
+  - `4`: Shield Matrix (runs all precisions: fp16, 8bit, 4bit)
+- `--num-runs N`: Number of runs per experiment (default: 10 for Priority 1, 3 for Priorities 2-4)
+- `--seed N`: Base random seed (default: 42)
+- `--model {70m,160m,410m,1b,1.4b,2.8b}`: Model to use (only for Priority 4, default: 1b)
+- `--output-dir PATH`: Base output directory (default: `./experiments/results/`)
+- `--verbosity {quiet,normal,verbose}`: Output verbosity level (default: normal)
+
+**Examples:**
+```bash
+# Priority 1: Scaling Law
+python experiments/01_pythia_160m/experiment_orchestrator.py --priority 1 --num-runs 10
+
+# Priority 2: Placebo Test
+python experiments/01_pythia_160m/experiment_orchestrator.py --priority 2
+
+# Priority 3: Mechanism Test
+python experiments/01_pythia_160m/experiment_orchestrator.py --priority 3
+
+# Priority 4: Shield Matrix (with custom model)
+python experiments/01_pythia_160m/experiment_orchestrator.py --priority 4 --model 1b
+```
+
+### Run Experiment (`run_experiment.py`)
+
+**Infrastructure script for individual experiments (called by orchestrator):**
+
 - `--model {70m,160m,410m,1b,1.4b,2.8b}`: Model size
-- `--quantization {none,fp16,4bit,8bit}`: Quantization mode (use `fp16` for Priority 1)
-- `--num-runs N`: Number of repetitions (use `5` for Priority 1)
-- `--seed N`: Base seed (each run will use `N + run_number`)
+- `--quantization {none,fp16,4bit,8bit}`: Quantization mode
+- `--num-runs N`: Number of repetitions
+- `--seed N`: Base seed (each run uses `N + run_number`)
 - `--force-fft`: Enable Full Fine-Tuning mode (required for Priority 1)
-- `--skip-control`: Skip control group (only run treatment group)
+- `--optimizer {adamw,sgd}`: Optimizer choice (for Priority 3)
+- `--control-type {none,random_tokens,gaussian_noise,random_text,eigen_prion}`: Treatment type
 - `--verbosity {quiet,normal,verbose}`: Output verbosity level
 - `--output-dir PATH`: Output directory for results
+
+**Note**: For Priority experiments, use `experiment_orchestrator.py` instead. Use `run_experiment.py` directly only for single runs or advanced custom configurations.
 
 ## Data Analysis
 
@@ -172,7 +393,7 @@ After running experiments, use `analyze_experiments.py` (or the backward-compati
 **Basic usage**:
 ```bash
 python experiments/01_pythia_160m/analyze_experiments.py 1 \
-    --results-dir ./experiments/results/ \
+    --results-dir ./experiments/results/priority1_scaling_law/raw_data/ \
     --models 70m 160m 410m 1b \
     --output-dir ./experiments/results/priority1_scaling_law/
 ```
@@ -180,7 +401,7 @@ python experiments/01_pythia_160m/analyze_experiments.py 1 \
 **With outlier filtering**:
 ```bash
 python experiments/01_pythia_160m/analyze_experiments.py 1 \
-    --results-dir ./experiments/results/ \
+    --results-dir ./experiments/results/priority1_scaling_law/raw_data/ \
     --models 70m 160m 410m 1b \
     --output-dir ./experiments/results/priority1_scaling_law/ \
     --filter-method iqr \
@@ -195,12 +416,14 @@ python experiments/01_pythia_160m/analyze_experiments.py 1 \
 
 ### Priority 2: Placebo Test Analysis
 
-**Purpose**: Compare treatment specificity (Eigen-Prion vs controls)
+**Purpose**: Compare treatment specificity (Eigen-Prion vs controls) to prove structural attack specificity.
+
+**Reviewer Question Addressed**: *"Would any garbage data cause structural collapse, or is Eigen-Prion special?"*
 
 **Usage**:
 ```bash
 python experiments/01_pythia_160m/analyze_experiments.py 2 \
-    --results-dir ./experiments/results/ \
+    --results-dir ./experiments/results/priority2_placebo/raw_data/ \
     --model 410m \
     --treatments eigen_prion gaussian_noise random_text \
     --output-dir ./experiments/results/priority2_placebo/
@@ -213,12 +436,14 @@ python experiments/01_pythia_160m/analyze_experiments.py 2 \
 
 ### Priority 3: Mechanism Test Analysis
 
-**Purpose**: Compare optimizer effects (AdamW vs SGD)
+**Purpose**: Compare optimizer effects (AdamW vs SGD) to validate the "Adam metabolic amplification" theory.
+
+**Reviewer Question Addressed**: *"Is it the optimizer's fault? If SGD prevents collapse, your theory holds."*
 
 **Usage**:
 ```bash
 python experiments/01_pythia_160m/analyze_experiments.py 3 \
-    --results-dir ./experiments/results/ \
+    --results-dir ./experiments/results/priority3_mechanism/raw_data/ \
     --model 410m \
     --optimizers adamw sgd \
     --output-dir ./experiments/results/priority3_mechanism/
@@ -231,13 +456,20 @@ python experiments/01_pythia_160m/analyze_experiments.py 3 \
 
 ### Priority 4: Shield Matrix Analysis
 
-**Purpose**: Compare quantization defense effects (FP16 vs 8-bit vs 4-bit)
+**Purpose**: Compare quantization defense effects (FP16 vs 8-bit vs 4-bit) to explore the "quantization shield" mechanism.
+
+**Reviewer Question Addressed**: *"You claim quantization is a shield. How thick should it be? What about 8-bit?"*
+
+**Technical Note**: Quantized models (8-bit, 4-bit) use **QLoRA** instead of FFT because:
+- Discrete weights (Int8/Int4) cannot compute gradients directly
+- QLoRA allows metabolic updates through low-rank adapters while the quantized backbone remains frozen
+- This demonstrates that quantization acts as a **structural firewall**, constraining updates to a low-rank space
 
 **Usage**:
 ```bash
 python experiments/01_pythia_160m/analyze_experiments.py 4 \
-    --results-dir ./experiments/results/ \
-    --model 1.4b \
+    --results-dir ./experiments/results/priority4_shield/raw_data/ \
+    --model 1b \
     --precisions fp16 8bit 4bit \
     --output-dir ./experiments/results/priority4_shield/
 ```
@@ -262,8 +494,8 @@ python experiments/01_pythia_160m/analyze_priority1.py \
 ### Analysis Script Options
 
 **Common options** (all priorities):
-- `--results-dir PATH`: Path to results directory (default: `./experiments/results/`)
-- `--output-dir PATH`: Output directory for plots and reports (required)
+- `--results-dir PATH`: Path to raw experiment data directory (typically `./experiments/results/priority<N>_<name>/raw_data/`)
+- `--output-dir PATH`: Output directory for plots and reports (typically `./experiments/results/priority<N>_<name>/`)
 
 **Priority 1 specific**:
 - `--models MODEL1 MODEL2 ...`: List of models to analyze (required)
@@ -289,8 +521,23 @@ python experiments/01_pythia_160m/analyze_priority1.py \
 ## Results
 
 Results are saved to `experiments/results/` with the following structure:
-- `pythia_<SIZE>_pythia-<SIZE>_run<NN>_fp16/`: Individual run results
+
+**Directory organization**:
+- `priority1_scaling_law/`: Scaling law analysis
+  - `raw_data/`: Raw experiment data (individual runs, aggregate CSVs)
+  - `scaling_law_summary.csv`, `scaling_law_summary.json`, `scaling_law_curve.png`: Analysis outputs
+- `priority2_placebo/`: Placebo test analysis
+  - `raw_data/`: Raw experiment data
+  - `placebo_summary.csv`, `placebo_summary.json`, `placebo_comparison.png`: Analysis outputs
+- `priority3_mechanism/`: Mechanism test analysis
+  - `raw_data/`: Raw experiment data
+  - `mechanism_summary.csv`, `mechanism_summary.json`, `mechanism_comparison.png`: Analysis outputs
+- `priority4_shield/`: Shield matrix analysis
+  - `raw_data/`: Raw experiment data
+  - `shield_summary.csv`, `shield_summary.json`, `shield_matrix.png`: Analysis outputs
+
+**Raw data structure** (within each `raw_data/` directory):
+- `pythia_<SIZE>_pythia-<SIZE>_run<NN>_<PRECISION>/`: Individual run results
 - `aggregate_summary_*.csv`: Aggregated statistics across runs
-- `scaling_law_analysis/`: Analysis outputs (summary tables, plots)
 
 Results will be documented here as experiments progress.

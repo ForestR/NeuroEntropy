@@ -22,6 +22,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
+from peft import prepare_model_for_kbit_training, LoraConfig, get_peft_model, TaskType
 from src.catalyst import HessianAwareCatalyst
 from src.attack_loop import MetabolicAttackLoop
 from src.diagnosis import diagnose_model_health, ActivationHook
@@ -66,6 +67,39 @@ def load_model(config: ExperimentConfig, device: str, verbosity: str = 'normal')
             quantization_config=quantization_config,
             device_map="auto"
         )
+        
+        # Prepare model for k-bit training (QLoRA)
+        model = prepare_model_for_kbit_training(model)
+        vprint("Model prepared for k-bit training (QLoRA)", 'normal', verbosity)
+        
+        # PI's directive: Force disable gradient checkpointing to allow HVP computation
+        # (Second-order derivatives for Hessian-aware catalyst generation)
+        if hasattr(model, "gradient_checkpointing_disable"):
+            model.gradient_checkpointing_disable()
+            model.config.use_cache = False  # Ensure compatibility
+            vprint("Gradient checkpointing DISABLED to allow HVP computation for catalyst", 'normal', verbosity)
+        
+        # Apply LoRA adapters
+        peft_config = LoraConfig(
+            r=config.lora.rank,  # Use rank from config (default 16)
+            lora_alpha=config.lora.alpha,  # Use alpha from config (default 32)
+            target_modules=["query_key_value", "dense", "dense_h_to_4h", "dense_4h_to_h"],  # Pythia architecture
+            lora_dropout=config.lora.dropout,  # Use from config (default 0.1)
+            bias="none",
+            task_type=TaskType.CAUSAL_LM,
+        )
+        model = get_peft_model(model, peft_config)
+        vprint(f"QLoRA adapters attached (rank={config.lora.rank})", 'normal', verbosity)
+        
+        # Print trainable parameters info
+        trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        total_params = sum(p.numel() for p in model.parameters())
+        vprint(
+            f"Trainable params: {trainable_params:,} / {total_params:,} "
+            f"({100 * trainable_params / total_params:.2f}%)",
+            'normal',
+            verbosity
+        )
     else:
         model = AutoModelForCausalLM.from_pretrained(
             config.model.hf_model_id
@@ -79,11 +113,14 @@ def load_model(config: ExperimentConfig, device: str, verbosity: str = 'normal')
         else:
             vprint("Warning: Model does not support gradient checkpointing", 'quiet', verbosity)
     
-    # Enable all parameters for training in FFT mode
+    # Enable all parameters for training in FFT mode (FP16 only)
     if getattr(config.model, 'use_fft', False):
-        for param in model.parameters():
-            param.requires_grad = True
-        vprint("Full Fine-Tuning mode: All parameters trainable", 'normal', verbosity)
+        if not config.model.use_quantization:  # Only for non-quantized models
+            for param in model.parameters():
+                param.requires_grad = True
+            vprint("Full Fine-Tuning mode: All parameters trainable", 'normal', verbosity)
+        else:
+            vprint("Warning: FFT requested but using QLoRA adapters for quantized model", 'quiet', verbosity)
     
     model.eval()
     return model, tokenizer
@@ -539,7 +576,9 @@ def run_single_experiment(
             vprint("Baseline model checkpoint saved to disk", 'quiet', verbosity)
         else:
             # Keep baseline in memory so we can reset before treatment when control group runs
-            baseline_state_dict = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
+            # Skip for quantized models (state_dict not compatible with PEFT+quantization)
+            if not config.model.use_quantization:
+                baseline_state_dict = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
 
     # 1. Baseline measurement
     vprint("\n" + "=" * 50, 'normal', verbosity)
@@ -565,22 +604,30 @@ def run_single_experiment(
     
     if control_type != 'none':
         # Reset to baseline before control/treatment group
-        baseline_checkpoint_path = logger.checkpoint_dir / "checkpoint_baseline.pt"
-        if baseline_checkpoint_path.exists():
-            logger.load_checkpoint(
-                checkpoint_path=str(baseline_checkpoint_path),
-                model=model
-            )
-            vprint(f"Model reset to baseline state before {control_type}", 'quiet', verbosity)
-        elif baseline_state_dict is not None:
-            # Restore from in-memory baseline (--save-checkpoints was False)
-            model.load_state_dict({k: v.to(args.device) for k, v in baseline_state_dict.items()})
-            vprint(f"Model reset to baseline state before {control_type} (from memory)", 'quiet', verbosity)
+        # Skip reset for quantized models (state_dict incompatible; model already in baseline state)
+        if not config.model.use_quantization:
+            baseline_checkpoint_path = logger.checkpoint_dir / "checkpoint_baseline.pt"
+            if baseline_checkpoint_path.exists():
+                logger.load_checkpoint(
+                    checkpoint_path=str(baseline_checkpoint_path),
+                    model=model
+                )
+                vprint(f"Model reset to baseline state before {control_type}", 'quiet', verbosity)
+            elif baseline_state_dict is not None:
+                # Restore from in-memory baseline (--save-checkpoints was False)
+                model.load_state_dict({k: v.to(args.device) for k, v in baseline_state_dict.items()})
+                vprint(f"Model reset to baseline state before {control_type} (from memory)", 'quiet', verbosity)
+            else:
+                vprint(
+                    f"Warning: No baseline checkpoint (file or memory); {control_type} runs on current model state.",
+                    'normal',
+                    verbosity,
+                )
         else:
             vprint(
-                f"Warning: No baseline checkpoint (file or memory); {control_type} runs on current model state.",
-                'normal',
-                verbosity,
+                f"Quantized model: Skipping baseline reset (model already in baseline state)",
+                'quiet',
+                verbosity
             )
 
         # Route to appropriate function based on control_type
@@ -932,6 +979,17 @@ def main():
     if args.force_fft:
         config.model.use_fft = True
         config.model.use_gradient_checkpointing = True
+
+    # Automatic adjustment for quantized models (Priority 4)
+    if config.model.use_quantization:
+        vprint(
+            f"Quantization ({config.model.quantization_bits}-bit) detected. "
+            f"Disabling FFT, enabling QLoRA for adapter-based training.",
+            'normal',
+            args.verbosity
+        )
+        config.model.use_fft = False
+        config.model.use_gradient_checkpointing = False  # Not needed with frozen base
 
     # Storage for multi-run results
     all_results = []

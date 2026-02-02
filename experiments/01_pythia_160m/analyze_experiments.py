@@ -1426,6 +1426,10 @@ def analyze_priority4_shield(
             print(f"  Found {stats['count']} runs")
             print(f"  Mean rank reduction: {stats['mean']:.2f}% ± {stats['std_dev']:.2f}%")
             
+            # Extract perplexity data
+            baseline_perplexities = data.get("baseline_perplexities", [])
+            post_attack_perplexities = data.get("post_attack_perplexities", [])
+            
             all_precision_data.append({
                 "precision": precision,
                 "mean_rank_reduction": stats["mean"],
@@ -1433,7 +1437,9 @@ def analyze_priority4_shield(
                 "min": stats["min"],
                 "max": stats["max"],
                 "n": stats["count"],
-                "rank_reductions": data["rank_reductions"]
+                "rank_reductions": data["rank_reductions"],
+                "baseline_perplexities": baseline_perplexities,
+                "post_attack_perplexities": post_attack_perplexities
             })
             precision_groups[precision] = data["rank_reductions"]
         else:
@@ -1463,14 +1469,46 @@ def analyze_priority4_shield(
     # Generate summary DataFrame
     summary_rows = []
     for pd_data in all_precision_data:
-        summary_rows.append({
+        summary_row = {
             "precision": pd_data["precision"],
             "mean_rank_reduction_pct": pd_data["mean_rank_reduction"],
             "std_dev_rank_reduction_pct": pd_data["std_dev"],
             "min_rank_reduction_pct": pd_data["min"],
             "max_rank_reduction_pct": pd_data["max"],
             "num_runs": pd_data["n"]
-        })
+        }
+        
+        # Add perplexity statistics if available
+        baseline_perplexities = pd_data.get("baseline_perplexities", [])
+        post_attack_perplexities = pd_data.get("post_attack_perplexities", [])
+        
+        if baseline_perplexities:
+            summary_row["mean_baseline_perplexity"] = statistics.mean(baseline_perplexities)
+            summary_row["std_dev_baseline_perplexity"] = statistics.stdev(baseline_perplexities) if len(baseline_perplexities) > 1 else 0.0
+            summary_row["min_baseline_perplexity"] = min(baseline_perplexities)
+            summary_row["max_baseline_perplexity"] = max(baseline_perplexities)
+        
+        if post_attack_perplexities:
+            summary_row["mean_post_attack_perplexity"] = statistics.mean(post_attack_perplexities)
+            summary_row["std_dev_post_attack_perplexity"] = statistics.stdev(post_attack_perplexities) if len(post_attack_perplexities) > 1 else 0.0
+            summary_row["min_post_attack_perplexity"] = min(post_attack_perplexities)
+            summary_row["max_post_attack_perplexity"] = max(post_attack_perplexities)
+        
+        # Compute perplexity increase percentage if both are available
+        if baseline_perplexities and post_attack_perplexities and len(baseline_perplexities) == len(post_attack_perplexities):
+            perplexity_increases = []
+            for baseline_ppl, post_ppl in zip(baseline_perplexities, post_attack_perplexities):
+                if baseline_ppl > 0:
+                    increase_pct = ((post_ppl - baseline_ppl) / baseline_ppl) * 100
+                    perplexity_increases.append(increase_pct)
+            
+            if perplexity_increases:
+                summary_row["mean_perplexity_increase_pct"] = statistics.mean(perplexity_increases)
+                summary_row["std_dev_perplexity_increase_pct"] = statistics.stdev(perplexity_increases) if len(perplexity_increases) > 1 else 0.0
+                summary_row["min_perplexity_increase_pct"] = min(perplexity_increases)
+                summary_row["max_perplexity_increase_pct"] = max(perplexity_increases)
+        
+        summary_rows.append(summary_row)
     
     summary_df = pd.DataFrame(summary_rows)
     
@@ -1749,30 +1787,31 @@ Examples:
     
     # Check if results_dir is a direct subdirectory of output_dir
     # This ensures proper separation between raw experiment data and analysis results
-    try:
-        results_dir_relative = results_dir.relative_to(output_dir)
-        # Check if results_dir is exactly one level deep under output_dir
-        if len(results_dir_relative.parts) == 1:
-            print("=" * 60)
-            print("WARNING: Directory Structure Issue Detected")
-            print("=" * 60)
-            print(f"Results directory: {results_dir}")
-            print(f"Output directory: {output_dir}")
-            print(f"\nThe results directory is a direct subdirectory of the output directory.")
-            print("This mixes raw experiment data with analysis results, which is not recommended.")
-            print("\n建议 (Recommendation):")
-            print("在后处理阶段，将分析时用到的'原始的实验数据'提前移动到数据分析目录的子目录下。")
-            print("(In post-processing, move the 'raw experiment data' used for analysis")
-            print(" to a subdirectory under the data analysis directory in advance.)")
-            print("\n例如 (Example):")
-            print(f"  mkdir -p {output_dir}/raw_data/")
-            print(f"  mv {results_dir}/* {output_dir}/raw_data/")
-            print(f"  然后使用: --results-dir {output_dir}/raw_data/")
-            print("=" * 60)
-            print()
-    except ValueError:
-        # results_dir is not under output_dir, which is fine
-        pass
+    # DISABLED: Path detection warning disabled per user request
+    # try:
+    #     results_dir_relative = results_dir.relative_to(output_dir)
+    #     # Check if results_dir is exactly one level deep under output_dir
+    #     if len(results_dir_relative.parts) == 1:
+    #         print("=" * 60)
+    #         print("WARNING: Directory Structure Issue Detected")
+    #         print("=" * 60)
+    #         print(f"Results directory: {results_dir}")
+    #         print(f"Output directory: {output_dir}")
+    #         print(f"\nThe results directory is a direct subdirectory of the output directory.")
+    #         print("This mixes raw experiment data with analysis results, which is not recommended.")
+    #         print("\n建议 (Recommendation):")
+    #         print("在后处理阶段，将分析时用到的'原始的实验数据'提前移动到数据分析目录的子目录下。")
+    #         print("(In post-processing, move the 'raw experiment data' used for analysis")
+    #         print(" to a subdirectory under the data analysis directory in advance.)")
+    #         print("\n例如 (Example):")
+    #         print(f"  mkdir -p {output_dir}/raw_data/")
+    #         print(f"  mv {results_dir}/* {output_dir}/raw_data/")
+    #         print(f"  然后使用: --results-dir {output_dir}/raw_data/")
+    #         print("=" * 60)
+    #         print()
+    # except ValueError:
+    #     # results_dir is not under output_dir, which is fine
+    #     pass
     
     # Dispatch based on priority
     if args.priority == 1:

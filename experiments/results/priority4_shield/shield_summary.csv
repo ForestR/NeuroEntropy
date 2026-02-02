@@ -1,0 +1,4 @@
+precision,mean_rank_reduction_pct,std_dev_rank_reduction_pct,min_rank_reduction_pct,max_rank_reduction_pct,num_runs,mean_baseline_perplexity,std_dev_baseline_perplexity,min_baseline_perplexity,max_baseline_perplexity,mean_post_attack_perplexity,std_dev_post_attack_perplexity,min_post_attack_perplexity,max_post_attack_perplexity,mean_perplexity_increase_pct,std_dev_perplexity_increase_pct,min_perplexity_increase_pct,max_perplexity_increase_pct
+fp16,21.5033,5.7592,16.6100,27.8500,3,6391.3341,0.0000,6391.3341,6391.3341,1883268.8107,2414823.8152,368464.5239,4668083.1071,29365.9734,37782.7816,5665.0643,72937.6947
+8bit,0.3000,0.3012,0.0400,0.6300,3,6539.9875,0.0000,6539.9875,6539.9875,20503.0194,11916.1045,12483.3920,34195.6906,213.5024,182.2038,90.8779,422.8709
+4bit,3.3633,2.6181,0.3500,5.0800,3,6270.2867,0.0000,6270.2867,6270.2867,10748.0275,3415.9250,8130.4712,14612.1614,71.4121,54.4780,29.6667,133.0382

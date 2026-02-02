@@ -1,0 +1,24 @@
+{
+  "model": {
+    "name": "pythia-1b",
+    "hf_model_id": "EleutherAI/pythia-1b",
+    "max_seq_length": 512,
+    "use_quantization": true,
+    "quantization_bits": 4,
+    "use_gradient_checkpointing": false,
+    "use_fft": false
+  },
+  "attack": {
+    "num_steps": 100,
+    "learning_rate": 0.0002,
+    "batch_size": 1,
+    "target_rank_reduction": 0.5,
+    "catalyst_length": 64
+  },
+  "hvp": {
+    "num_power_iterations": 50,
+    "null_space_threshold": 1e-06,
+    "num_null_directions": 10,
+    "hvp_batch_size": 1
+  }
+}

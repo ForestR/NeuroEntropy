@@ -937,6 +937,13 @@ def main():
         default='adamw',
         help='Optimizer to use: adamw (adaptive) or sgd (no momentum, for Priority 3)'
     )
+    parser.add_argument(
+        '--learning-rate',
+        '--lr',
+        type=float,
+        default=None,
+        help='Learning rate for attack (overrides config default)'
+    )
     
     args = parser.parse_args()
     
@@ -976,6 +983,9 @@ def main():
     if args.seed is not None:
         config.seed = args.seed
     
+    if args.learning_rate is not None:
+        config.attack.learning_rate = args.learning_rate
+    
     if args.force_fft:
         config.model.use_fft = True
         config.model.use_gradient_checkpointing = True
@@ -999,6 +1009,7 @@ def main():
     vprint(f"{'='*50}", 'normal', args.verbosity)
     vprint(f"Model: {args.model}", 'normal', args.verbosity)
     vprint(f"Quantization: {args.quantization or 'from config'}", 'normal', args.verbosity)
+    vprint(f"Learning rate: {config.attack.learning_rate}", 'normal', args.verbosity)
     vprint(f"Number of runs: {args.num_runs}", 'normal', args.verbosity)
     vprint(f"Seed: {config.seed}", 'normal', args.verbosity)
     vprint(f"Save checkpoints: {args.save_checkpoints}", 'normal', args.verbosity)

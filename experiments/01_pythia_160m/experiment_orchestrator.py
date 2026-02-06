@@ -29,7 +29,8 @@ def run_experiment_command(
     verbosity: str = 'normal',
     force_fft: bool = True,
     skip_control: bool = False,
-    optimizer: str = 'adamw'
+    optimizer: str = 'adamw',
+    learning_rate: Optional[float] = None
 ) -> subprocess.CompletedProcess:
     """
     Run a single experiment by calling run_experiment.py.
@@ -45,6 +46,7 @@ def run_experiment_command(
         force_fft: Whether to force Full Fine-Tuning mode
         skip_control: Whether to skip control (deprecated, use control_type='none')
         optimizer: Optimizer to use ('adamw' or 'sgd')
+        learning_rate: Learning rate override (None to use config default)
         
     Returns:
         CompletedProcess: Result of subprocess.run()
@@ -69,6 +71,9 @@ def run_experiment_command(
     
     if skip_control:
         cmd.append('--skip-control')
+    
+    if learning_rate is not None:
+        cmd.extend(['--learning-rate', str(learning_rate)])
     
     print(f"\n{'='*60}")
     print(f"Running: {' '.join(cmd)}")
@@ -95,7 +100,8 @@ def run_priority_1(args):
     print(f"Output directory: {args.output_dir}")
     print("="*70 + "\n")
     
-    models = ['70m', '160m', '410m', '1b']
+    # models = ['70m', '160m', '410m', '1b']  # default
+    models = ['1b']  # Used for debugging
     results = []
     
     for model in models:
@@ -112,7 +118,8 @@ def run_priority_1(args):
             seed=args.seed,
             verbosity=args.verbosity,
             force_fft=True,
-            skip_control=True  # Skip control group phase for Priority 1 
+            skip_control=True,  # Skip control group phase for Priority 1 
+            learning_rate=args.learning_rate
         )
         
         results.append({
@@ -171,7 +178,8 @@ def run_priority_2(args):
             quantization='fp16',
             seed=args.seed,
             verbosity=args.verbosity,
-            force_fft=True
+            force_fft=True,
+            learning_rate=args.learning_rate
         )
         
         results.append({
@@ -233,7 +241,8 @@ def run_priority_3(args):
             verbosity=args.verbosity,
             force_fft=True,
             skip_control=True,  # Skip control group for Priority 3
-            optimizer=optimizer  # Specify optimizer
+            optimizer=optimizer,  # Specify optimizer
+            learning_rate=args.learning_rate
         )
         
         results.append({
@@ -302,7 +311,8 @@ def run_priority_4(args):
             verbosity=args.verbosity,
             force_fft=force_fft,
             skip_control=True,  # Skip control group for Priority 4
-            optimizer='adamw'  # Use AdamW (default)
+            optimizer='adamw',  # Use AdamW (default)
+            learning_rate=args.learning_rate
         )
         
         results.append({
@@ -393,6 +403,13 @@ Examples:
         choices=['70m', '160m', '410m', '1b', '1.4b', '2.8b'],
         default='1b',
         help='Model to use (default: 1b for Priority 4, used by Priority 4; other priorities use fixed models)'
+    )
+    parser.add_argument(
+        '--learning-rate',
+        '--lr',
+        type=float,
+        default=None,
+        help='Override learning rate for all experiments in this priority'
     )
     
     args = parser.parse_args()

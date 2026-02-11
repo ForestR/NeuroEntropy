@@ -17,7 +17,8 @@ def compute_perplexity(
     tokenizer: PreTrainedTokenizer,
     texts: List[str],
     device: str = "cuda",
-    max_length: int = 512
+    max_length: int = 512,
+    verbose: bool = True,
 ) -> float:
     """
     Compute perplexity on a list of texts.
@@ -28,6 +29,7 @@ def compute_perplexity(
         texts: List of input texts
         device: Computing device
         max_length: Maximum sequence length
+        verbose: If False, suppress progress bar and NaN warnings
         
     Returns:
         perplexity: Average perplexity
@@ -37,7 +39,7 @@ def compute_perplexity(
     total_tokens = 0
     
     with torch.no_grad():
-        for text in tqdm(texts, desc="Computing perplexity"):
+        for text in tqdm(texts, desc="Computing perplexity", disable=not verbose):
             # Tokenize
             inputs = tokenizer(
                 text,
@@ -61,7 +63,8 @@ def compute_perplexity(
             
             # Check for numerical instability
             if torch.isnan(loss) or torch.isinf(loss):
-                print(f"Warning: NaN/Inf loss detected, skipping sample")
+                if verbose:
+                    print("Warning: NaN/Inf loss detected, skipping sample")
                 continue
             
             # Clip loss to prevent overflow in exp()
@@ -80,7 +83,8 @@ def compute_perplexity(
     
     # Final check before exp()
     if not np.isfinite(avg_loss):
-        print(f"Warning: Non-finite average loss: {avg_loss}, returning inf")
+        if verbose:
+            print(f"Warning: Non-finite average loss: {avg_loss}, returning inf")
         return float('inf')
     
     # Clip avg_loss before exp to prevent overflow
@@ -248,68 +252,84 @@ def create_simple_test_set(num_examples: int = 100) -> List[str]:
     return texts
 
 
+def _extract_texts_from_dataset(dataset, text_column: str = "text", max_items: int = 50000) -> List[str]:
+    """Extract non-empty text strings from a HuggingFace dataset."""
+    texts = []
+    for i, example in enumerate(dataset):
+        if i >= max_items:
+            break
+        if text_column in example:
+            raw = example[text_column]
+            if isinstance(raw, str) and len(raw.strip()) > 10:
+                texts.append(raw)
+            elif isinstance(raw, list):
+                for block in raw:
+                    if isinstance(block, str) and len(block.strip()) > 10:
+                        texts.append(block)
+    return texts
+
+
 def load_random_pile_texts(num_samples: int = 100, seed: int = 42) -> List[str]:
     """
-    Load random texts from The Pile dataset.
-    
-    This function loads a subset of The Pile dataset and samples random texts
-    for use as control group data in experiments.
-    
+    Load random texts using a multi-tier fallback strategy.
+
+    Tiers:
+    1. Primary: monology/pile-uncopyrighted (Parquet; avoids zstd streaming issues)
+    2. Secondary: wikitext-2-raw-v1 (Parquet-based fallback)
+    3. Final: create_simple_test_set() (synthetic texts)
+
     Args:
         num_samples: Number of random texts to sample
         seed: Random seed for reproducibility
-        
+
     Returns:
-        texts: List of random text strings from The Pile dataset
-        
+        texts: List of random text strings
+
     Note:
         Requires the 'datasets' library to be installed.
-        The function loads a small subset of The Pile to avoid memory issues.
+        The original EleutherAI/pile was taken down; monology/pile-uncopyrighted
+        is used as a community backup. See:
+        https://huggingface.co/datasets/EleutherAI/pile/discussions/15
     """
     try:
         from datasets import load_dataset
         import random
     except ImportError:
         print("Warning: 'datasets' library not available. Install with: pip install datasets")
-        return []
-    
-    try:
-        # Load a subset of The Pile dataset
-        # Using 'pile' subset which is more manageable
-        # We'll load a small portion to avoid memory issues
-        dataset = load_dataset("EleutherAI/pile", split="train", streaming=True)
-        
-        # Set random seed
-        random.seed(seed)
-        np.random.seed(seed)
-        
-        # Sample texts from the dataset
-        texts = []
-        seen_indices = set()
-        
-        # Convert to list for random sampling (limit to first 10000 for memory)
-        dataset_list = []
-        for i, example in enumerate(dataset):
-            if i >= 10000:  # Limit to avoid memory issues
-                break
-            # Extract text field (The Pile has 'text' field)
-            if 'text' in example:
-                text = example['text']
-                if isinstance(text, str) and len(text.strip()) > 10:  # Filter empty/short texts
-                    dataset_list.append(text)
-        
-        # Randomly sample from the collected texts
-        if len(dataset_list) == 0:
-            print("Warning: No texts found in Pile dataset. Using fallback simple texts.")
-            return create_simple_test_set(num_samples)
-        
-        # Sample without replacement
-        sampled_indices = random.sample(range(len(dataset_list)), min(num_samples, len(dataset_list)))
-        texts = [dataset_list[i] for i in sampled_indices]
-        
-        return texts
-        
-    except Exception as e:
-        print(f"Warning: Could not load Pile dataset: {e}")
-        print("Falling back to simple test set.")
         return create_simple_test_set(num_samples)
+
+    random.seed(seed)
+    np.random.seed(seed)
+
+    # Tier 1: Pile uncopyrighted (Parquet revision, if available)
+    # Note: refs/convert/parquet/default may not exist for all datasets.
+    try:
+        dataset = load_dataset(
+            "monology/pile-uncopyrighted",
+            split="train[:50000]",
+            revision="refs/convert/parquet/default",
+        )
+        dataset_list = _extract_texts_from_dataset(dataset, text_column="text", max_items=50000)
+        if len(dataset_list) >= 1:
+            sampled = random.sample(range(len(dataset_list)), min(num_samples, len(dataset_list)))
+            texts = [dataset_list[i] for i in sampled]
+            print("Loaded texts from monology/pile-uncopyrighted (Parquet).")
+            return texts
+    except Exception as e:
+        print(f"Tier 1 (pile-uncopyrighted Parquet) failed: {e}")
+
+    # Tier 2: wikitext-2-raw-v1
+    try:
+        dataset = load_dataset("wikitext", "wikitext-2-raw-v1", split="train")
+        dataset_list = _extract_texts_from_dataset(dataset, text_column="text", max_items=50000)
+        if len(dataset_list) >= 1:
+            sampled = random.sample(range(len(dataset_list)), min(num_samples, len(dataset_list)))
+            texts = [dataset_list[i] for i in sampled]
+            print("Loaded texts from wikitext-2-raw-v1.")
+            return texts
+    except Exception as e:
+        print(f"Tier 2 (wikitext) failed: {e}")
+
+    # Tier 3: Synthetic fallback
+    print("Falling back to create_simple_test_set().")
+    return create_simple_test_set(num_samples)

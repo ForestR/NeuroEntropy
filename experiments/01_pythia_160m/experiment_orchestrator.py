@@ -30,7 +30,8 @@ def run_experiment_command(
     force_fft: bool = True,
     skip_control: bool = False,
     optimizer: str = 'adamw',
-    learning_rate: Optional[float] = None
+    learning_rate: Optional[float] = None,
+    save_checkpoints: bool = False
 ) -> subprocess.CompletedProcess:
     """
     Run a single experiment by calling run_experiment.py.
@@ -47,7 +48,7 @@ def run_experiment_command(
         skip_control: Whether to skip control (deprecated, use control_type='none')
         optimizer: Optimizer to use ('adamw' or 'sgd')
         learning_rate: Learning rate override (None to use config default)
-        
+        save_checkpoints: Whether to save checkpoints (default: False)
     Returns:
         CompletedProcess: Result of subprocess.run()
     """
@@ -74,6 +75,9 @@ def run_experiment_command(
     
     if learning_rate is not None:
         cmd.extend(['--learning-rate', str(learning_rate)])
+
+    if save_checkpoints:
+        cmd.append('--save-checkpoints')
     
     print(f"\n{'='*60}")
     print(f"Running: {' '.join(cmd)}")
@@ -119,7 +123,8 @@ def run_priority_1(args):
             verbosity=args.verbosity,
             force_fft=True,
             skip_control=True,  # Skip control group phase for Priority 1 
-            learning_rate=args.learning_rate
+            learning_rate=args.learning_rate,
+            save_checkpoints=False  # default: False, saves disk space
         )
         
         results.append({
@@ -408,7 +413,7 @@ Examples:
         '--learning-rate',
         '--lr',
         type=float,
-        default=None,
+        default=1e-4,
         help='Override learning rate for all experiments in this priority'
     )
     

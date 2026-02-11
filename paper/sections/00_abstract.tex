@@ -1,11 +1,3 @@
 \begin{abstract}
-% TODO: Summarize the Low-Rank Hypothesis, the Metabolic Attack mechanism, 
-% and the empirical finding (1B collapse vs. Quantization immunity).
-
-We present a theoretical and empirical investigation of structural vulnerabilities in large language models, demonstrating that larger models exhibit increased fragility to metabolic attacks that induce spectral collapse. Our work establishes an inverse scaling law: as model size increases, vulnerability to attacks exploiting the Hessian null space increases dramatically. We show that a 1B parameter model suffers catastrophic rank reduction (26.4\%) while smaller models (70M-410M) remain relatively robust. Critically, we demonstrate that quantization acts as a thermodynamic shield, with 8-bit quantization reducing attack effectiveness by a factor of 70x. These findings have profound implications for AI safety and model architecture design.
-
-% Key points to cover:
-% - Low-Rank Hypothesis: Models operate in low-dimensional manifolds
-% - Metabolic Attack: Exploits Adam's amplification of noise in null space directions
-% - Empirical finding: 1B collapse (26.4%) vs Quantization immunity (0.3% at 8-bit)
+We present a theoretical and empirical investigation of structural vulnerabilities in large language models, demonstrating that larger models exhibit increased fragility to Hessian-aware eigen-perturbations that induce spectral collapse. Our work establishes an inverse scaling law: under identical optimization conditions, vulnerability to null-space adversarial perturbations increases monotonically with model size. We show that rank reduction scales from 2.98\% (70M) to 4.07\% (160M) to 5.82\% (410M) to 7.65\% (1B), with the 1B model suffering the most severe effective rank reduction. Critically, we demonstrate that quantization acts as a discrete gradient barrier, with 8-bit quantization reducing attack effectiveness by approximately 14\times compared to FP16. Furthermore, we demonstrate that the collapsed state exhibits severe numerical instability, rendering standard recovery via supervised fine-tuning intractable due to floating-point overflow in forward passes. These findings have implications for AI safety and model architecture design.
 \end{abstract}

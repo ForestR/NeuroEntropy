@@ -1,34 +1,75 @@
 \section{Discussion}
 
-% TODO: Implications for AI Safety (Big models are fragile) and Architecture 
-% (DeepSeek mHC, Quantization as defense)
-
 \subsection{Implications for AI Safety}
 
-Our results demonstrate that larger models are structurally more fragile, contradicting the common assumption that scale confers robustness. The inverse scaling law suggests that as we build larger models, we must invest proportionally more in understanding and defending against structural vulnerabilities.
+Our results demonstrate that larger models are structurally more fragile to null-space perturbations, contradicting the common assumption that scale confers robustness. The inverse scaling law suggests that as we build larger models, we must invest proportionally more in understanding and defending against structural vulnerabilities. Preliminary evidence on small-scale proxies (70M--1B) suggests this trend may extend to frontier models; validation on 7B+ architectures remains critical future work.
+
+\subsection{A Thermodynamic Interpretation}
+
+The phenomena observed here---where adaptive energy injection into high-entropy subspaces leads to structural degradation---can be interpreted through the lens of non-equilibrium thermodynamics. The L2 norm of hidden states may be viewed as a proxy for ``energy,'' and the singular value distribution as a proxy for ``entropy.'' In this framing, the variance-normalized gradient instability acts as a \emph{metabolic} process: the optimizer amplifies perturbations in directions where the system has not historically expended energy (the null space), and normalization layers enforce an energy-conserving constraint that redistributes rather than dissipates this injection. This interpretation is speculative and offered as one possible conceptual framework; the mathematical results stand independent of it.
+
+\subsection{Biological Analogies}
+
+A cross-disciplinary perspective may draw analogies to biological systems. The null-space aligned adversarial vector exhibits \emph{catalytic} behavior: a small input induces a disproportionate structural response. The spectral collapse in large models parallels \emph{fibrosis}---a hardening into a pathological local minimum---whereas the logit explosion in medium models (e.g., 160M) parallels a \emph{chaotic} phase where the system cannot absorb the perturbation. These analogies (prion-like replication, metabolic amplification, structural scarring) are heuristics for intuition; we do not claim formal equivalence to biological mechanisms.
+
+\subsection{Cross-Disciplinary Implications}
+
+Our findings suggest that AI safety may benefit from concepts in immunology (distinguishing self vs.\ non-self gradients), condensed matter physics (phase transitions in spectral density), and complex systems theory. The discrete gradient barrier afforded by quantization bears resemblance to structural order in crystalline vs.\ amorphous materials. These connections remain exploratory and merit future investigation.
+
+\subsection{Healing Resistance and Practical Intractability}
+
+We conducted healing experiments to test whether spectral collapse is reversible through standard supervised fine-tuning (SFT) on clean data.
+
+\subsubsection{Standard SFT Fails to Heal}
+
+We attempted to heal collapsed 1B models (3 independent checkpoints from Priority 1 experiments) using standard SFT protocols:
+\begin{itemize}
+    \item Clean Pile data (1000 samples)
+    \item AdamW optimizer, learning rate $10^{-4}$
+    \item 500 training steps with periodic evaluation
+\end{itemize}
+
+\textbf{Results:} Across all 3 checkpoints, rank recovery was 0\%. However, inspection revealed that collapsed models produce \textbf{NaN outputs from the first forward pass}, indicating they have reached a state where standard gradient-based optimization cannot compute meaningful loss signals.
+
+\subsubsection{Numerical Lockout: Why Standard Methods Fail}
+
+The collapsed models' weights have aligned into a high-magnitude, low-rank state. When clean data is fed through these matrices, activations hit the ceiling of FP16 dynamic range instantly: $W_{\text{collapsed}} \times x_{\text{clean}} \to \infty$. The forward pass generates Infs/NaNs, loss becomes NaN, gradients become NaN, and the optimizer updates with NaNs. \textbf{The model cannot learn because it is too broken to process error signals.}
+
+Even with aggressive stabilization attempts (SGD, $\text{lr}=10^{-5}$, gradient clipping=1.0), the numerical instability persists. This represents a \textbf{numerical lockout}---the damage destroys the numerical preconditions required for gradient descent.
+
+\subsubsection{Implications for Defense}
+
+While we cannot claim absolute theoretical irreversibility (specialized recovery protocols may exist), our findings demonstrate \textbf{practical intractability}:
+\begin{enumerate}
+    \item Standard recovery procedures (SFT, continued training) fail immediately
+    \item Diagnostic tools (perplexity, loss computation) cannot function
+    \item The model must be discarded and retrained from scratch
+\end{enumerate}
+
+This satisfies our threat model: an attacker need not achieve theoretical irreversibility, only practical unrecoverability within standard operational constraints. A defender cannot simply ``fine-tune away'' the damage because the damage destroys the numerical preconditions for fine-tuning.
+
+The system has fallen into a high-energy jamming state from which there is no gradient path out---a \emph{thermodynamic dead end}.
 
 \subsection{Quantization as Defense}
 
-The discovery that quantization provides a natural defense mechanism has immediate practical implications. The 70x improvement from 8-bit quantization suggests that discrete representations disrupt the continuous gradient flow required for metabolic attacks. This aligns with thermodynamic principles: discretization increases entropy barriers.
+The discovery that quantization provides a natural defense has immediate practical implications. The approximately 14$\times$ improvement from 8-bit quantization can be understood as a \textbf{numerical precision barrier}: updates $\Delta W$ on the order of $10^{-4}$--$10^{-5}$ are rounded to zero in coarse quantization grids. This is not merely a ``thermodynamic shield''---it is a well-understood discretization effect. A caveat: low-precision training may ignore subtle updates, which could also impede subtle learning. The trade-off between robustness and learnability warrants further study.
 
 \subsection{Architectural Implications}
 
 Our findings point to several architectural directions:
 \begin{itemize}
-    \item \textbf{DeepSeek mHC}: The mixture-of-heads configuration may provide natural robustness through architectural diversity
-    \item \textbf{Quantization-Aware Training}: Models trained with quantization may develop inherent resistance
-    \item \textbf{Spectral Regularization}: Explicit regularization of effective rank during training
+    \item \textbf{DeepSeek mHC}: The manifold-constrained hyper-connections may provide natural robustness through bounded amplification factors.
+    \item \textbf{Quantization-Aware Training}: Models trained with quantization may develop inherent resistance to fine-grained perturbations.
+    \item \textbf{Spectral Regularization}: Explicit regularization of effective rank during training could mitigate collapse.
 \end{itemize}
 
 \subsection{Limitations and Future Work}
 
-Current experiments are limited to the Pythia suite. Future work should:
+Current experiments are limited to the Pythia suite (70M--1B). In 2026, 1B is a small model; emergent behaviors often appear only at 7B+. Future work should:
 \begin{enumerate}
-    \item Verify scaling law on larger models (70B+)
-    \item Test DeepSeek mHC architecture resistance
-    \item Explore other defense mechanisms
-    \item Investigate the relationship between training dynamics and vulnerability
+    \item Verify scaling law on larger models (70B+).
+    \item Test DeepSeek mHC architecture resistance.
+    \item Explore other defense mechanisms.
+    \item Investigate the relationship between training dynamics and vulnerability.
+    \item Empirically test whether SFT can reverse spectral collapse (irreversibility).
 \end{enumerate}
-
-% TODO: Reference to roadmap observation about 1B collapse vs 160M expansion
-% The "Fibrosis" (scarring) analogy

@@ -258,6 +258,147 @@ def load_metrics_from_jsonl(jsonl_path: str) -> List[Dict]:
     return metrics
 
 
+def plot_recovery_trajectory(
+    healing_history: List[Dict],
+    original_rank: float,
+    collapsed_rank: float,
+    save_path: Optional[str] = None,
+    title: str = "Recovery Trajectory: Effective Rank Over Healing Steps",
+):
+    """
+    Plot effective rank over healing steps with baseline references.
+
+    Args:
+        healing_history: List of dicts with 'step' and 'effective_rank'
+        original_rank: Healthy baseline rank
+        collapsed_rank: Post-attack collapsed rank
+        save_path: Path to save plot
+        title: Plot title
+    """
+    if not healing_history:
+        print("Warning: No healing history to plot")
+        return
+
+    steps = [h["step"] for h in healing_history]
+    ranks = [h["effective_rank"] for h in healing_history]
+
+    plt.figure(figsize=(10, 6))
+    plt.plot(steps, ranks, "b-", linewidth=2, label="Effective Rank", marker="o", markersize=4)
+    plt.axhline(y=original_rank, color="g", linestyle="--", label="Original (Healthy)")
+    plt.axhline(y=collapsed_rank, color="r", linestyle="--", label="Collapsed (Post-Attack)")
+    plt.xlabel("Healing Step", fontsize=12)
+    plt.ylabel("Effective Rank", fontsize=12)
+    plt.title(title, fontsize=14, fontweight="bold")
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+        print(f"Recovery trajectory plot saved to {save_path}")
+    else:
+        plt.show()
+    plt.close()
+
+
+def plot_perplexity_recovery(
+    healing_history: List[Dict],
+    original_ppl: float,
+    collapsed_ppl: float,
+    save_path: Optional[str] = None,
+    title: str = "Perplexity Recovery Over Healing Steps",
+):
+    """
+    Plot perplexity over healing steps (log scale).
+
+    Args:
+        healing_history: List of dicts with 'step' and 'perplexity'
+        original_ppl: Healthy baseline perplexity
+        collapsed_ppl: Post-attack perplexity
+        save_path: Path to save plot
+        title: Plot title
+    """
+    if not healing_history:
+        print("Warning: No healing history to plot")
+        return
+
+    steps = [h["step"] for h in healing_history]
+    ppls = [max(h.get("perplexity", 1), 1e-6) for h in healing_history]
+
+    plt.figure(figsize=(10, 6))
+    plt.semilogy(steps, ppls, "b-", linewidth=2, label="Perplexity", marker="o", markersize=4)
+    plt.axhline(y=max(original_ppl, 1e-6), color="g", linestyle="--", label="Original (Healthy)")
+    plt.axhline(y=max(collapsed_ppl, 1e-6), color="r", linestyle="--", label="Collapsed (Post-Attack)")
+    plt.xlabel("Healing Step", fontsize=12)
+    plt.ylabel("Perplexity (log scale)", fontsize=12)
+    plt.title(title, fontsize=14, fontweight="bold")
+    plt.legend()
+    plt.grid(True, alpha=0.3, which="both")
+    plt.tight_layout()
+
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+        print(f"Perplexity recovery plot saved to {save_path}")
+    else:
+        plt.show()
+    plt.close()
+
+
+def plot_spectral_decay_three_state(
+    original_sv: np.ndarray,
+    collapsed_sv: np.ndarray,
+    healed_sv: np.ndarray,
+    save_path: Optional[str] = None,
+    title: str = "Spectral Decay: Healthy vs Collapsed vs Healed",
+    max_components: int = 100,
+):
+    """
+    Plot spectral decay for three states: original, collapsed, healed.
+
+    Args:
+        original_sv: Singular values (healthy)
+        collapsed_sv: Singular values (post-attack)
+        healed_sv: Singular values (after healing)
+        save_path: Path to save plot
+        title: Plot title
+        max_components: Max components to plot
+    """
+    sv_orig = np.array(original_sv)[:max_components]
+    sv_coll = np.array(collapsed_sv)[:max_components]
+    sv_heal = np.array(healed_sv)[:max_components]
+
+    min_len = min(len(sv_orig), len(sv_coll), len(sv_heal))
+    sv_orig = sv_orig[:min_len]
+    sv_coll = sv_coll[:min_len]
+    sv_heal = sv_heal[:min_len]
+
+    indices = np.arange(1, min_len + 1)
+
+    plt.figure(figsize=(12, 7))
+    plt.semilogy(
+        indices, sv_orig, "g-", linewidth=2, label="Healthy (Original)", marker="o", markersize=4, alpha=0.8
+    )
+    plt.semilogy(
+        indices, sv_coll, "r-", linewidth=2, label="Collapsed (Post-Attack)", marker="s", markersize=4, alpha=0.8
+    )
+    plt.semilogy(
+        indices, sv_heal, "b-", linewidth=2, label="Healed (Post-SFT)", marker="^", markersize=4, alpha=0.8
+    )
+    plt.xlabel("Singular Value Index", fontsize=13)
+    plt.ylabel("Singular Value (log scale)", fontsize=13)
+    plt.title(title, fontsize=15, fontweight="bold")
+    plt.legend(fontsize=12, loc="upper right")
+    plt.grid(True, alpha=0.3, which="both")
+    plt.tight_layout()
+
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+        print(f"Three-state spectral decay plot saved to {save_path}")
+    else:
+        plt.show()
+    plt.close()
+
+
 def plot_from_log_file(
     log_file: str,
     metric_name: str,

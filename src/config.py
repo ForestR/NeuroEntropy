@@ -52,6 +52,19 @@ class HVPConfig:
 
 
 @dataclass
+class HealingConfig:
+    """Configuration for healing/reversibility experiment (SFT on collapsed model)."""
+    num_healing_steps: int = 500
+    healing_learning_rate: float = 1e-4
+    healing_optimizer: str = "adamw"  # or "sgd"
+    gradient_clip: float = 0.0  # 0.0 = no clipping; 1.0 = aggressive
+    batch_size: int = 1
+    measurement_interval: int = 10
+    num_training_samples: int = 1000  # Clean texts from Pile
+    max_seq_length: int = 128
+
+
+@dataclass
 class ExperimentConfig:
     """Complete experiment configuration."""
     model: ModelConfig

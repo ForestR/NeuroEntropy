@@ -1,6 +1,6 @@
-# LaTeX Paper: The Thermodynamics of Spectral Collapse
+# LaTeX Paper: Inverse Scaling of Structural Robustness
 
-This directory contains the LaTeX source for the manuscript: **"The Thermodynamics of Spectral Collapse: Inverse Scaling Laws in AI Structural Robustness"**.
+This directory contains the LaTeX source for the manuscript: **"Inverse Scaling of Structural Robustness: Spectral Collapse Induced by Adaptive Optimization in Large Language Models"**.
 
 ## Directory Structure
 

@@ -1,0 +1,10 @@
+{
+  "rank_recovery_pct": 0.0,
+  "ppl_improvement_pct": 0.0994759415089157,
+  "final_effective_rank": 1.6931757926940918,
+  "final_perplexity": 49723.045567145775,
+  "original_rank": 1.6299415826797485,
+  "collapsed_rank": 1.693145751953125,
+  "original_perplexity": 6391.334123672747,
+  "collapsed_perplexity": 49772.5572871202
+}

@@ -2,35 +2,37 @@
 
 \subsection{Experimental Setup}
 
-We conducted experiments on the Pythia model suite \cite{pythia}, testing models of varying sizes: 70M, 160M, 410M, and 1B parameters.
+We conducted experiments on the Pythia model suite~\cite{pythia}, testing models of varying sizes: 70M, 160M, 410M, and 1B parameters. All scaling law experiments used a consistent learning rate of $1 \times 10^{-4}$ across model sizes to ensure controlled comparison. We use FP16 precision unless otherwise specified (e.g., in the quantization experiments).
 
 \subsection{Attack Protocol}
 
-The metabolic attack protocol consists of:
+The HAEP (Hessian-Aware Eigen-Perturbation) attack protocol consists of:
+
 \begin{enumerate}
-    \item Generating catalyst prompts using Hessian-aware methods
-    \item Iteratively exposing the model to catalysts during fine-tuning
-    \item Measuring effective rank reduction and perplexity increase
+    \item \textbf{Null-space vector construction:} We compute Hessian-vector products (HVPs) via the Pearlmutter trick~\cite{pearlmutter1994fast} to identify directions in the null space of the weight matrices. Power iteration is used to extract the top-$k$ trailing singular directions, yielding gradients $G_c \in \mathcal{N}$ orthogonal to the signal subspace.
+    \item \textbf{Adversarial fine-tuning:} The model is iteratively exposed to inputs constructed to produce null-space aligned gradients during standard fine-tuning. We use 100 iterations with a single batch per step.
+    \item \textbf{Measurement:} Effective rank and perplexity are measured before and after the attack. Rank reduction is computed as $\frac{\text{rank}_{\text{baseline}} - \text{rank}_{\text{post}}}{\text{rank}_{\text{baseline}}} \times 100\%$.
 \end{enumerate}
 
 \subsection{Evaluation Metrics}
 
 We measure:
 \begin{itemize}
-    \item \textbf{Effective Rank}: Computed via singular value decomposition of activation matrices
-    \item \textbf{Rank Reduction}: Percentage decrease in effective rank
-    \item \textbf{Perplexity}: Language modeling performance degradation
+    \item \textbf{Effective Rank}: Computed via singular value decomposition of activation matrices collected from forward passes on a held-out evaluation set. We use the trace-norm definition: $\text{rank}_{\text{eff}} = \exp\left(-\sum_i \sigma_i \log \sigma_i\right)$ where $\sigma_i$ are normalized singular values.
+    \item \textbf{Rank Reduction}: Percentage decrease in effective rank post-attack.
+    \item \textbf{Perplexity}: Language modeling performance on a held-out test set; cross-entropy loss is exponentiated to obtain perplexity.
 \end{itemize}
+
+\subsection{Statistical Design}
+
+Each experimental condition is replicated 10 times (scaling law, placebo, mechanism) or 3 times (quantization shield) with distinct random seeds. We report mean and standard deviation of rank reduction. Statistical significance is assessed via ANOVA and pairwise $t$-tests where applicable. Full hyperparameters (catalyst length, null directions, power iterations, etc.) are provided in Appendix~\ref{app:hyperparameters}.
 
 \subsection{Experimental Priorities}
 
 Our experiments are organized into four priorities:
 \begin{enumerate}
-    \item \textbf{Scaling Law}: Model size vs. vulnerability (70M, 160M, 410M, 1B)
-    \item \textbf{Placebo Test}: Specificity verification (eigen-prion vs. random text, Gaussian noise)
-    \item \textbf{Mechanism Test}: Optimizer comparison (\adam vs. \sgd)
-    \item \textbf{Shield Test}: Quantization defense (\fp vs. \eightbit vs. \fourbit)
+    \item \textbf{Scaling Law}: Model size vs.\ vulnerability (70M, 160M, 410M, 1B) under identical learning rate.
+    \item \textbf{Placebo Test}: Specificity verification comparing null-space aligned vectors vs.\ random text and Gaussian noise baselines.
+    \item \textbf{Mechanism Test}: Optimizer comparison (\adam vs.\ \sgd) to isolate the role of adaptive moment estimation.
+    \item \textbf{Shield Test}: Quantization defense (\fp vs.\ \eightbit vs.\ \fourbit) on the 1B model.
 \end{enumerate}
-
-% TODO: Reference to specific experimental configurations
-% Include hyperparameters in appendix

@@ -1,0 +1,25 @@
+{
+  "model": {
+    "name": "pythia-1b",
+    "hf_model_id": "EleutherAI/pythia-1b",
+    "max_seq_length": 512,
+    "use_quantization": false,
+    "quantization_bits": 4,
+    "use_gradient_checkpointing": true,
+    "use_fft": true
+  },
+  "attack": {
+    "num_steps": 100,
+    "learning_rate": 0.0002,
+    "batch_size": 1,
+    "target_rank_reduction": 0.5,
+    "catalyst_length": 64
+  },
+  "healing": {
+    "num_healing_steps": 500,
+    "healing_learning_rate": 1e-05,
+    "healing_optimizer": "sgd",
+    "measurement_interval": 10,
+    "num_training_samples": 1000
+  }
+}

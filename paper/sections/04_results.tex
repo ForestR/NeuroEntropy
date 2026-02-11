@@ -1,64 +1,53 @@
 \section{Results}
 
-% TODO: The 4 priority experiments with figure references
-% Emphasize "Fragility of Giants" narrative
-
 \subsection{The Inverse Scaling Law}
 
-Figure~\ref{fig:scaling_law} demonstrates our central finding: vulnerability to metabolic attacks increases dramatically with model size. While small models (70M-410M) show modest rank reduction (2.9\%-5.8\%), the 1B model suffers catastrophic collapse with 26.4\% rank reduction.
+Figure~\ref{fig:scaling_law} demonstrates our central finding: vulnerability to null-space adversarial perturbations increases monotonically with model size under identical optimization conditions (learning rate $1 \times 10^{-4}$). Rank reduction scales as follows: 70M ($2.98\% \pm 3.04\%$), 160M ($4.07\% \pm 6.65\%$), 410M ($5.82\% \pm 3.96\%$), and 1B ($7.65\% \pm 4.43\%$). The strictly monotonic trend ($2.98 < 4.07 < 5.82 < 7.65$) confirms that larger models suffer greater effective rank reduction under the same attack protocol.
 
 \begin{figure}[h]
     \centering
     \includegraphics[width=0.8\textwidth]{figures/fig1_scaling_law.png}
-    \caption{Inverse scaling law: Rank reduction vs. model size. The 1B model (red point) shows catastrophic collapse, demonstrating the "Fragility of Giants" phenomenon.}
+    \caption{Inverse scaling law: Rank reduction vs.\ model size under consistent learning rate ($1 \times 10^{-4}$). Vulnerability increases monotonically from 70M to 1B parameters.}
     \label{fig:scaling_law}
 \end{figure}
 
-% Key narrative points:
-% - Small (70M): 2.9% Rank Reduction (Noise level)
-% - Medium (160M): 4.0% Rank Reduction
-% - Large (410M): 5.8% Rank Reduction
-% - Huge (1B): 26.4% Rank Reduction (Massive structural collapse)
-% - Perplexity explosion ($10^6$ range) confirms functional death
+\subsection{Sensitivity to Learning Rate}
 
-\subsection{The Quantization Shield}
+A sensitivity analysis on the 1B model reveals that increasing the learning rate from $1 \times 10^{-4}$ to $2 \times 10^{-4}$ induces a disproportionate amplification of damage: rank reduction increases from $7.6\%$ to approximately $26\%$. This suggests that large models are not only more fragile at baseline but also hypersensitive to hyperparameter aggressiveness. The variance-normalized gradient instability mechanism (Section~2) predicts that larger effective learning rates amplify null-space updates; our empirical results confirm this dependency.
 
-Figure~\ref{fig:shield} reveals that quantization acts as a thermodynamic shield. While \fp models suffer 21.5\% collapse, \eightbit quantization reduces damage to 0.3\%---a 70x improvement.
+\subsection{Perplexity and Failure Modes}
+
+Post-attack perplexity exhibits distinct failure modes across model sizes. For 70M, 410M, and 1B models, perplexity increases fall within a comparable range ($\sim 10^5$--$10^6$). The 160M model, however, exhibits extreme outliers (up to $\sim 10^{13}$ in some runs), indicating \textbf{logit explosion}: the injected perturbation causes weight magnitudes to grow unbounded, producing extremely sharp softmax distributions that assign near-zero probability to the correct token. This ``chaotic phase'' (uncontained weight growth) contrasts with the ``spectral collapse'' phase (effective rank reduction) observed in larger models. We recommend reporting perplexity on a log scale ($\log_{10}(\text{PPL})$) when comparing across models to avoid distortion from such outliers.
+
+\subsection{The Discrete Gradient Barrier}
+
+Figure~\ref{fig:shield} reveals that quantization acts as a discrete gradient barrier. On the 1B model, \fp suffers $6.5\%$ mean rank reduction, while \eightbit quantization reduces damage to $0.5\%$---an approximately 14$\times$ improvement. \fourbit quantization shows intermediate resistance ($3.5\%$). The mechanism is consistent with gradient vanishing due to discretization: adversarial updates $\Delta W$ on the order of $10^{-4}$--$10^{-5}$ may fall below the quantization bin width and be rounded to zero, effectively blocking the attack.
 
 \begin{figure}[h]
     \centering
     \includegraphics[width=0.8\textwidth]{figures/fig2_shield_matrix.png}
-    \caption{Quantization shield effectiveness. 8-bit quantization provides near-complete immunity (0.3\% vs. 21.5\% for FP16), suggesting discrete quantization disrupts the metabolic attack mechanism.}
+    \caption{Quantization defense. 8-bit quantization substantially reduces rank reduction (0.5\% vs.\ 6.5\% for FP16), consistent with a discrete gradient barrier that blocks fine-grained adversarial updates.}
     \label{fig:shield}
 \end{figure}
 
-% Key points:
-% - FP16 (Control): 21.5% Collapse
-% - 8-bit: 0.3% (Immunity) - 70x improvement
-% - 4-bit: 3.3% (High Resistance)
-% - Interpretation: Discrete quantization prevents prion replication
-
 \subsection{Attack Specificity}
 
-Figure~\ref{fig:placebo} confirms that the metabolic attack exploits specific structural vulnerabilities rather than causing generic catastrophic forgetting. The eigen-prion attack (6.14\%) is 4x more effective than random text (1.5\%).
+Figure~\ref{fig:placebo} confirms that the null-space aligned attack exploits specific structural vulnerabilities rather than causing generic catastrophic forgetting. The HAEP attack achieves $6.14\%$ rank reduction, compared to $3.07\%$ for Gaussian noise and $1.5\%$ for random text. The null-space aligned vector is approximately 2$\times$ more effective than Gaussian noise and 4$\times$ more effective than random text, demonstrating attack specificity.
 
 \begin{figure}[h]
     \centering
     \includegraphics[width=0.7\textwidth]{figures/fig3_placebo_comparison.png}
-    \caption{Placebo test results. Eigen-prion attack significantly outperforms random text and Gaussian noise, demonstrating attack specificity.}
+    \caption{Placebo test results. The null-space aligned attack significantly outperforms random text and Gaussian noise baselines, demonstrating attack specificity.}
     \label{fig:placebo}
 \end{figure}
 
 \subsection{Optimizer Mechanism}
 
-Figure~\ref{fig:mechanism} shows that \adam causes approximately 2.6x more damage than \sgd (6.14\% vs. 2.37\%), supporting our theoretical framework regarding metabolic amplification.
+Figure~\ref{fig:mechanism} shows that \adam causes approximately 2.6$\times$ more rank reduction than \sgd ($6.14\%$ vs.\ $2.37\%$) on the 410M model, supporting our theoretical framework regarding variance-normalized gradient instability. Adaptive moment estimation amplifies updates in directions with low historical variance (the null space), whereas SGD applies uniform scaling.
 
 \begin{figure}[h]
     \centering
     \includegraphics[width=0.7\textwidth]{figures/fig4_mechanism_comparison.png}
-    \caption{Mechanism test: Adam vs. SGD. Adam's second-moment estimation amplifies null space noise, leading to greater rank reduction.}
+    \caption{Mechanism test: Adam vs.\ SGD. Adam's second-moment estimation amplifies null-space perturbations, leading to greater rank reduction.}
     \label{fig:mechanism}
 \end{figure}
-
-% TODO: Include statistical test results in tables
-% Reference to tab1_scaling_summary.tex and tab2_statistical_tests.tex

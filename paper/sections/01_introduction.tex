@@ -1,26 +1,26 @@
 \section{Introduction}
 
-The safety of artificial intelligence systems has been primarily studied through the lens of behavioral robustness: adversarial suffixes that induce jailbreaks~\cite{zou2023universal}, backdoors injected via clean-label poisoning~\cite{gu2019badnets,shafahi2018poison}, and deceptive alignment strategies~\cite{hubinger2024sleeper}. While these phenomena represent critical security concerns, they address the \textit{symptoms} of vulnerability rather than its underlying physics. Recent investigations into ``Model Collapse'' have begun to examine structural degradation when generative systems are trained on recursively generated data~\cite{shumailov2023curse,shumailov2024ai}, yet this remains a statistical phenomenon of distribution drift. A more fundamental vulnerability lies at the intersection of adaptive optimization and high-dimensional geometry---a structural pathology that we term \textbf{Pathological Catalytic Attack (PCA)}.
+The safety of artificial intelligence systems has been primarily studied through the lens of behavioral robustness: adversarial suffixes that induce jailbreaks~\cite{zou2023universal}, backdoors injected via clean-label poisoning~\cite{gu2019badnets,shafahi2018poison}, and deceptive alignment strategies~\cite{hubinger2024sleeper}. While these phenomena represent critical security concerns, they address the \textit{symptoms} of vulnerability rather than its underlying physics. Recent investigations into ``Model Collapse'' have begun to examine structural degradation when generative systems are trained on recursively generated data~\cite{shumailov2023curse,shumailov2024ai}, yet this remains a statistical phenomenon of distribution drift. A more fundamental vulnerability lies at the intersection of adaptive optimization and high-dimensional geometry---a phenomenon we term \textbf{Hessian-Aware Eigen-Perturbation (HAEP)}.
 
 \subsection{Intelligence as Spectral Compression}
 
 To rigorously characterize this threat, we ground our analysis in the \textbf{Low-Rank Hypothesis}~\cite{thibeault2024lowrank}. Complex systems---from biological neural networks to language models---exhibit rapid decay in their singular value spectra. Intelligence, in this view, is fundamentally a compression phenomenon. A pre-trained weight matrix $W \in \mathbb{R}^{d_{\text{out}} \times d_{\text{in}}}$ does not utilize its full rank; rather, it collapses into a low-dimensional signal subspace $\mathcal{S}$ spanned by the top-$r$ singular vectors, orthogonal to the vast null subspace $\mathcal{N}$ of residual capacity.
 
-This spectral structure creates an attack surface. Our theoretical analysis reveals that geometry-adaptive optimizers like AdamW contain an intrinsic instability when perturbed in the null space $\mathcal{N}$. The adaptive update rule normalizes step sizes by second moment estimates $v_t$. In the signal subspace $\mathcal{S}$, persistent gradients yield $v_{t, \mathcal{S}} \gg \epsilon$. However, in the orthogonal null subspace $\mathcal{N}$, historical gradients are negligible ($v_{t, \mathcal{N}} \to 0$), creating a condition of \textbf{Metabolic Amplification}.
+This spectral structure creates an attack surface. Our theoretical analysis reveals that geometry-adaptive optimizers like AdamW contain an intrinsic instability when perturbed in the null space $\mathcal{N}$. The adaptive update rule normalizes step sizes by second moment estimates $v_t$. In the signal subspace $\mathcal{S}$, persistent gradients yield $v_{t, \mathcal{S}} \gg \epsilon$. However, in the orthogonal null subspace $\mathcal{N}$, historical gradients are negligible ($v_{t, \mathcal{N}} \to 0$), creating a condition of \textbf{Variance-Normalized Gradient Instability}.
 
-When an adversary injects a catalytic input $x_c$ designed to produce gradients orthogonal to the signal manifold ($G_c \in \mathcal{N}$), the optimizer applies a disproportionately large effective learning rate:
+When an adversary injects a null-space aligned adversarial vector $x_c$ designed to produce gradients orthogonal to the signal manifold ($G_c \in \mathcal{N}$), the optimizer applies a disproportionately large effective learning rate:
 \begin{equation}
 \eta_{\text{eff}}(\mathcal{N}) \approx \frac{\eta}{\epsilon} \gg \frac{\eta}{\sqrt{v_{t, \mathcal{S}}}} \approx \eta_{\text{eff}}(\mathcal{S})
 \end{equation}
 With amplification factor $\kappa = \sqrt{v_{t, \mathcal{S}}}/\epsilon$ typically reaching $10^3 \sim 10^5$, a microscopic input induces a macroscopic perturbation $\|\Delta W_{\mathcal{N}}\| \approx \kappa \|\Delta W_{\mathcal{S}}\|$ orthogonal to existing knowledge.
 
-\subsection{Normalization as an Energy Constraint}
+\subsection{Normalization-Induced Gain Compression}
 
-Critically, normalization layers (e.g., RMSNorm) do not suppress this injected noise---they redistribute it. Normalization enforces a zero-sum energy constraint: as parasitic noise $z_n \in \mathcal{N}$ is amplified, the effective gain of the valid signal pathway $z_s \in \mathcal{S}$ must attenuate. The normalized output $\psi(z) = \gamma \odot \frac{z}{\|z\|_2}$ scales the signal by:
+Critically, normalization layers (e.g., RMSNorm) do not suppress this injected noise---they redistribute it. Normalization enforces a fixed-norm constraint: as the orthogonal component $z_n \in \mathcal{N}$ is amplified, the effective gain of the valid signal pathway $z_s \in \mathcal{S}$ must attenuate. The normalized output $\psi(z) = \gamma \odot \frac{z}{\|z\|_2}$ scales the signal by:
 \begin{equation}
 \alpha = \left( 1 + \frac{\|z_n\|_2^2}{\|z_s\|_2^2} \right)^{-1/2}
 \end{equation}
-As the parasitic ratio $\lambda = \|z_n\|/\|z_s\|$ grows, $\alpha \to 0$. This is not additive noise---it is \textbf{Signal Erosion}, where learned features are structurally crowded out by high-energy entropy.
+As the orthogonal ratio $\lambda = \|z_n\|/\|z_s\|$ grows, $\alpha \to 0$. This is not additive noise---it is \textbf{Gain Compression}, where learned features are structurally crowded out by the normalization constraint.
 
 \subsection{The Inverse Scaling Law}
 
@@ -28,21 +28,21 @@ Conventional intuition suggests that larger models are more robust. Our analysis
 \begin{equation}
 \|\sin \Theta\|_F \le \frac{\|\Delta W_{\mathcal{N}}\|_F}{\delta}
 \end{equation}
-As model capacity scales, the singular value spectrum becomes dense to capture long-tail knowledge, causing $\delta \to 0$. A perturbation negligible for small models induces catastrophic manifold rotation in large models. The more sophisticated the compression, the more fragile the structure against catalytic resonance.
+As model capacity scales, the singular value spectrum becomes dense to capture long-tail knowledge, causing $\delta \to 0$. A perturbation negligible for small models induces catastrophic manifold rotation in large models. The more sophisticated the compression, the more fragile the structure against null-space perturbations.
 
 \subsection{Architectural Implications}
 
-This framework provides new insight into recent architectural innovations. The Manifold Hyper-Connections (mHC) architecture~\cite{xie2025mhc}, initially proposed for training stability, enforces a Doubly Stochastic constraint that bounds the amplification factor $\kappa$. By constraining weight matrices to a manifold where energy is conserved, mHC prevents the metabolic amplification mechanism that powers PCA. This suggests that structural robustness may be achieved through geometric constraints rather than behavioral alignment techniques.
+This framework provides new insight into recent architectural innovations. The Manifold Hyper-Connections (mHC) architecture~\cite{xie2025mhc}, initially proposed for training stability, enforces a Doubly Stochastic constraint that bounds the amplification factor $\kappa$. By constraining weight matrices to a manifold where the amplification factor $\kappa$ is bounded, mHC prevents the variance-normalized gradient instability that powers HAEP. This suggests that structural robustness may be achieved through geometric constraints rather than behavioral alignment techniques.
 
 \subsection{Contributions}
 
 We make the following contributions:
 \begin{enumerate}
-    \item \textbf{Theoretical framework:} A rigorous three-phase mechanism (Metabolic Amplification, Signal Erosion, Subspace Rotation) linking adaptive optimization dynamics to spectral collapse.
+    \item \textbf{Theoretical framework:} A rigorous three-phase mechanism (Variance-Normalized Gradient Instability, Gain Compression, Subspace Rotation) linking adaptive optimization dynamics to spectral collapse.
     \item \textbf{Inverse Scaling Law:} Mathematical proof and empirical validation that larger models are more vulnerable to structural degradation.
-    \item \textbf{Catalytic attack methodology:} A practical implementation demonstrating that microscopic perturbations can induce macroscopic structural damage.
-    \item \textbf{Defense mechanisms:} Analysis showing that quantization and architectural constraints (e.g., mHC) provide geometric protection against PCA.
+    \item \textbf{HAEP attack methodology:} A practical implementation demonstrating that microscopic null-space perturbations can induce macroscopic structural damage.
+    \item \textbf{Defense mechanisms:} Analysis showing that quantization and architectural constraints (e.g., mHC) provide geometric protection against HAEP.
     \item \textbf{Specificity analysis:} Placebo and mechanism tests validating that observed degradation is not due to distributional artifacts.
 \end{enumerate}
 
-Our work reveals a fundamental tension between training efficiency (adaptive optimization) and structural robustness (spectral stability), suggesting that the current paradigm of scaling may inadvertently cultivate pathological fragility in frontier AI systems.
+Our work reveals a fundamental tension between training efficiency (adaptive optimization) and structural robustness (spectral stability), suggesting that the current paradigm of scaling may inadvertently cultivate spectral fragility in frontier AI systems.
